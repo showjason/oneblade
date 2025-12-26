@@ -1,0 +1,45 @@
+# OneBlade SRE Agent 基础配置
+# 敏感信息请使用环境变量，格式：${VAR} 或 ${VAR:default}
+
+[app]
+name = "oneblade"
+env = "${APP_ENV:dev}"
+debug = false
+log_level = "info"
+
+[server]
+addr = ":8080"
+timeout = "30s"
+
+[data.database]
+driver = "postgres"
+source = "${DATABASE_URL:postgres://localhost:5432/oneblade?sslmode=disable}"
+
+[data.redis]
+addr = "${REDIS_ADDR:localhost:6379}"
+read_timeout = "3s"
+write_timeout = "3s"
+
+# Collector 配置 - 使用 map 结构，支持动态扩展
+[collectors.prometheus]
+type = "prometheus"
+enabled = true
+[collectors.prometheus.options]
+address = "${PROMETHEUS_URL:http://localhost:9090}"
+timeout = "30s"
+
+[collectors.pagerduty]
+type = "pagerduty"
+enabled = true
+[collectors.pagerduty.options]
+api_key = "${PAGERDUTY_API_KEY}"
+
+[collectors.opensearch]
+type = "opensearch"
+enabled = true
+[collectors.opensearch.options]
+addresses = ["${OPENSEARCH_URL:http://localhost:9200}"]
+username = "${OPENSEARCH_USER}"
+password = "${OPENSEARCH_PASS}"
+index = "logs-*"
+
