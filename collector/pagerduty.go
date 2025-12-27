@@ -99,7 +99,7 @@ func init() {
 	RegisterCollector(CollectorPagerDuty, func(opts interface{}) (Collector, error) {
 		pdOpts, ok := opts.(*config.PagerDutyOptions)
 		if !ok {
-			return nil, fmt.Errorf("invalid pagerduty options type, got %T", opts)
+			panic(fmt.Errorf("invalid pagerduty options type, got %T", opts))
 		}
 		return NewPagerDutyCollectorFromOptions(pdOpts), nil
 	})

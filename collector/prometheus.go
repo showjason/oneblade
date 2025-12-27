@@ -115,7 +115,7 @@ func init() {
 	RegisterCollector(CollectorPrometheus, func(opts interface{}) (Collector, error) {
 		promOpts, ok := opts.(*config.PrometheusOptions)
 		if !ok {
-			return nil, fmt.Errorf("invalid prometheus options type, got %T", opts)
+			panic(fmt.Errorf("invalid prometheus options type, got %T", opts))
 		}
 		return NewPrometheusCollectorFromOptions(promOpts)
 	})

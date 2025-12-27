@@ -7,32 +7,36 @@ import (
 	"github.com/oneblade/collector"
 )
 
-// OrchestratorConfig 编排 Agent 配置
-type OrchestratorConfig struct {
+// Orchestrator 编排 Agent 配置
+type Orchestrator struct {
 	Model    blades.ModelProvider
-	Registry *collector.Registry
+	Collectors []collector.Collector
 }
 
 // NewOrchestratorAgent 创建主编排 Agent
-func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
+func NewOrchestratorAgent(o Orchestrator) (blades.Agent, error) {
 	// 从 Registry 获取所有 Collectors
-	collectors := cfg.Registry.All()
+	collectors := o.Collectors
 
 	// 创建统一数据采集 Agent
 	dataCollectionAgent, err := NewDataCollectionAgent(DataCollectionAgentConfig{
-		Model:      cfg.Model,
+		Model:      o.Model,
 		Collectors: collectors,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	reportAgent, err := NewReportAgent(cfg.Model)
+	reportAgent, err := NewReportAgent(ReportAgentConfig{
+		Model: o.Model,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	predictionAgent, err := NewPredictionAgent(cfg.Model)
+	predictionAgent, err := NewPredictionAgent(PredictionAgentConfig{
+		Model: o.Model,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +56,7 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 	return flow.NewRoutingAgent(flow.RoutingConfig{
 		Name:        "sre_orchestrator",
 		Description: "SRE 智能巡检系统主控 Agent",
-		Model:       cfg.Model,
+		Model:       o.Model,
 		SubAgents: []blades.Agent{
 			analysisAgent,
 			dataCollectionAgent,

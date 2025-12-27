@@ -14,10 +14,10 @@ type DataCollectionAgentConfig struct {
 }
 
 // NewDataCollectionAgent 创建统一数据采集 Agent
-func NewDataCollectionAgent(acfg DataCollectionAgentConfig) (blades.Agent, error) {
+func NewDataCollectionAgent(cfg DataCollectionAgentConfig) (blades.Agent, error) {
 	// 创建各个 Collector Tool
 	var tools []tools.Tool
-	for _, c := range acfg.Collectors {
+	for _, c := range cfg.Collectors {
 		tool, err := c.AsTool()
 		if err != nil {
 			return nil, err
@@ -57,7 +57,7 @@ func NewDataCollectionAgent(acfg DataCollectionAgentConfig) (blades.Agent, error
 - 特定服务: service:api-gateway AND level:ERROR
 
 根据任务需求智能选择和组合工具，提供全面的数据分析结果。`),
-		blades.WithModel(acfg.Model),
+		blades.WithModel(cfg.Model),
 		blades.WithTools(tools...),
 	)
 }

@@ -47,7 +47,7 @@ func main() {
 	// 创建 Orchestrator Agent
 	orchestrator, err := agent.NewOrchestratorAgent(agent.OrchestratorConfig{
 		Model:    model,
-		Registry: registry,
+		Collectors: registry.All(),
 	})
 	if err != nil {
 		log.Fatalf("failed to create orchestrator agent: %v", err)

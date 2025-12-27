@@ -117,7 +117,7 @@ func init() {
 	RegisterCollector(CollectorOpenSearch, func(opts interface{}) (Collector, error) {
 		osOpts, ok := opts.(*config.OpenSearchOptions)
 		if !ok {
-			return nil, fmt.Errorf("invalid opensearch options type, got %T", opts)
+			panic(fmt.Errorf("invalid opensearch options type, got %T", opts))
 		}
 		return NewOpenSearchCollectorFromOptions(osOpts)
 	})
