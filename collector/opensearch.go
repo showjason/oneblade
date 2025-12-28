@@ -6,11 +6,19 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/go-kratos/blades/tools"
-	"github.com/oneblade/config"
 	"github.com/opensearch-project/opensearch-go/v2"
 	"github.com/opensearch-project/opensearch-go/v2/opensearchapi"
 )
+
+// OpenSearchOptions OpenSearch 采集器选项
+type OpenSearchOptions struct {
+	Addresses []string `toml:"addresses" validate:"required,min=1,dive,url"`
+	Username  string   `toml:"username"`
+	Password  string   `toml:"password"`
+	Index     string   `toml:"index" validate:"required"`
+}
 
 // OpenSearchCollector OpenSearch 采集器
 type OpenSearchCollector struct {
@@ -22,7 +30,7 @@ type OpenSearchCollector struct {
 }
 
 // NewOpenSearchCollectorFromOptions 从配置选项创建 OpenSearch 采集器
-func NewOpenSearchCollectorFromOptions(opts *config.OpenSearchOptions) (*OpenSearchCollector, error) {
+func NewOpenSearchCollectorFromOptions(opts *OpenSearchOptions) (*OpenSearchCollector, error) {
 	client, err := opensearch.NewClient(opensearch.Config{
 		Addresses: opts.Addresses,
 		Username:  opts.Username,
@@ -114,10 +122,16 @@ func (c *OpenSearchCollector) Close() error {
 }
 
 func init() {
+	// 注册解析器（使用闭包调用泛型函数）
+	RegisterOptionsParser(CollectorOpenSearch, func(meta *toml.MetaData, primitive toml.Primitive) (interface{}, error) {
+		return ParseOptions[OpenSearchOptions](meta, primitive, "opensearch")
+	})
+
+	// 注册 collector 工厂
 	RegisterCollector(CollectorOpenSearch, func(opts interface{}) (Collector, error) {
-		osOpts, ok := opts.(*config.OpenSearchOptions)
+		osOpts, ok := opts.(*OpenSearchOptions)
 		if !ok {
-			panic(fmt.Errorf("invalid opensearch options type, got %T", opts))
+			return nil, fmt.Errorf("invalid opensearch options type, got %T", opts)
 		}
 		return NewOpenSearchCollectorFromOptions(osOpts)
 	})

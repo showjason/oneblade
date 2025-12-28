@@ -66,12 +66,26 @@ func (r *Registry) InitFromConfig(loader *config.Loader) error {
 			continue
 		}
 
-		opts, err := loader.ParseCollectorOptions(name, collectorCfg.Type, collectorCfg.Options)
+		// 获取原始配置数据
+		primitive, meta, err := loader.GetCollectorOptions(name)
+		if err != nil {
+			return fmt.Errorf("get options for %s: %w", name, err)
+		}
+
+		// 获取解析器
+		collectorType := CollectorType(collectorCfg.Type)
+		parser, ok := GetOptionsParser(collectorType)
+		if !ok {
+			return fmt.Errorf("no parser registered for collector type: %s", collectorType)
+		}
+
+		// 统一调用解析器
+		opts, err := parser(meta, primitive)
 		if err != nil {
 			return fmt.Errorf("parse options for %s: %w", name, err)
 		}
 
-		collectorType := CollectorType(collectorCfg.Type)
+		// 创建 collector
 		collector, err := r.createCollector(collectorType, opts)
 		if err != nil {
 			return fmt.Errorf("create collector %s: %w", name, err)

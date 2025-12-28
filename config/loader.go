@@ -21,8 +21,6 @@ type Loader struct {
 	collectorMeta map[string]*toml.MetaData
 	mu            sync.RWMutex
 	validator     *validator.Validate
-	parsers       map[string]CollectorOptionsParser
-	parsersMu     sync.RWMutex
 }
 
 // NewLoader 创建配置加载器
@@ -39,10 +37,8 @@ func NewLoader(baseDir string) (*Loader, error) {
 	loader := &Loader{
 		baseDir:       baseDir,
 		validator:     validator.New(),
-		parsers:       make(map[string]CollectorOptionsParser),
 		collectorMeta: make(map[string]*toml.MetaData),
 	}
-	loader.registerDefaultParsers()
 	return loader, nil
 }
 
@@ -256,34 +252,28 @@ func (l *Loader) BaseDir() string {
 	return l.baseDir
 }
 
-// registerDefaultParsers 注册默认解析器
-func (l *Loader) registerDefaultParsers() {
-	l.RegisterParser("prometheus", &PrometheusOptionsParser{})
-	l.RegisterParser("pagerduty", &PagerDutyOptionsParser{})
-	l.RegisterParser("opensearch", &OpenSearchOptionsParser{})
-}
+// GetCollectorOptions 获取指定 collector 的原始配置数据
+func (l *Loader) GetCollectorOptions(collectorName string) (toml.Primitive, *toml.MetaData, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
-// RegisterParser 注册解析器
-func (l *Loader) RegisterParser(collectorType string, parser CollectorOptionsParser) {
-	l.parsersMu.Lock()
-	defer l.parsersMu.Unlock()
-	l.parsers[collectorType] = parser
-}
+	cfg := l.config
+	if cfg == nil {
+		var zero toml.Primitive
+		return zero, nil, fmt.Errorf("config not loaded")
+	}
 
-// ParseCollectorOptions 解析 Collector 的 Options 到具体类型
-func (l *Loader) ParseCollectorOptions(collectorName string, collectorType string, primitive toml.Primitive) (interface{}, error) {
-	l.parsersMu.RLock()
-	parser, ok := l.parsers[collectorType]
-	l.parsersMu.RUnlock()
-
+	collectorCfg, ok := cfg.Collectors[collectorName]
 	if !ok {
-		return nil, fmt.Errorf("no parser registered for collector type: %s", collectorType)
+		var zero toml.Primitive
+		return zero, nil, fmt.Errorf("collector %s not found", collectorName)
 	}
 
-	meta := l.GetCollectorMeta(collectorName)
+	meta := l.collectorMeta[collectorName]
 	if meta == nil {
-		return nil, fmt.Errorf("no metadata found for collector: %s", collectorName)
+		var zero toml.Primitive
+		return zero, nil, fmt.Errorf("no metadata for collector %s", collectorName)
 	}
 
-	return parser.ParseOptions(meta, primitive)
+	return collectorCfg.Options, meta, nil
 }

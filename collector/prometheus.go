@@ -5,11 +5,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/go-kratos/blades/tools"
-	"github.com/oneblade/config"
+	"github.com/oneblade/utils"
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 )
+
+// PrometheusOptions Prometheus 采集器选项
+type PrometheusOptions struct {
+	Address string        `toml:"address" validate:"required,url"`
+	Timeout utils.Duration `toml:"timeout"`
+}
 
 // PrometheusCollector Prometheus 采集器
 type PrometheusCollector struct {
@@ -20,7 +27,7 @@ type PrometheusCollector struct {
 }
 
 // NewPrometheusCollectorFromOptions 从配置选项创建 Prometheus 采集器
-func NewPrometheusCollectorFromOptions(opts *config.PrometheusOptions) (*PrometheusCollector, error) {
+func NewPrometheusCollectorFromOptions(opts *PrometheusOptions) (*PrometheusCollector, error) {
 	client, err := api.NewClient(api.Config{Address: opts.Address})
 	if err != nil {
 		return nil, fmt.Errorf("create prometheus client: %w", err)
@@ -112,10 +119,16 @@ func (c *PrometheusCollector) Close() error {
 }
 
 func init() {
+	// 注册解析器（使用闭包调用泛型函数）
+	RegisterOptionsParser(CollectorPrometheus, func(meta *toml.MetaData, primitive toml.Primitive) (interface{}, error) {
+		return ParseOptions[PrometheusOptions](meta, primitive, "prometheus")
+	})
+
+	// 注册 collector 工厂
 	RegisterCollector(CollectorPrometheus, func(opts interface{}) (Collector, error) {
-		promOpts, ok := opts.(*config.PrometheusOptions)
+		promOpts, ok := opts.(*PrometheusOptions)
 		if !ok {
-			panic(fmt.Errorf("invalid prometheus options type, got %T", opts))
+			return nil, fmt.Errorf("invalid prometheus options type, got %T", opts)
 		}
 		return NewPrometheusCollectorFromOptions(promOpts)
 	})

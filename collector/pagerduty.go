@@ -4,10 +4,15 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/BurntSushi/toml"
 	"github.com/PagerDuty/go-pagerduty"
 	"github.com/go-kratos/blades/tools"
-	"github.com/oneblade/config"
 )
+
+// PagerDutyOptions PagerDuty 采集器选项
+type PagerDutyOptions struct {
+	APIKey string `toml:"api_key" validate:"required"`
+}
 
 // PagerDutyCollector PagerDuty 采集器
 type PagerDutyCollector struct {
@@ -16,7 +21,7 @@ type PagerDutyCollector struct {
 }
 
 // NewPagerDutyCollectorFromOptions 从配置选项创建 PagerDuty 采集器
-func NewPagerDutyCollectorFromOptions(opts *config.PagerDutyOptions) *PagerDutyCollector {
+func NewPagerDutyCollectorFromOptions(opts *PagerDutyOptions) *PagerDutyCollector {
 	return &PagerDutyCollector{
 		apiKey: opts.APIKey,
 		client: pagerduty.NewClient(opts.APIKey),
@@ -96,10 +101,16 @@ func (c *PagerDutyCollector) Close() error {
 }
 
 func init() {
+	// 注册解析器（使用闭包调用泛型函数）
+	RegisterOptionsParser(CollectorPagerDuty, func(meta *toml.MetaData, primitive toml.Primitive) (interface{}, error) {
+		return ParseOptions[PagerDutyOptions](meta, primitive, "pagerduty")
+	})
+
+	// 注册 collector 工厂
 	RegisterCollector(CollectorPagerDuty, func(opts interface{}) (Collector, error) {
-		pdOpts, ok := opts.(*config.PagerDutyOptions)
+		pdOpts, ok := opts.(*PagerDutyOptions)
 		if !ok {
-			panic(fmt.Errorf("invalid pagerduty options type, got %T", opts))
+			return nil, fmt.Errorf("invalid pagerduty options type, got %T", opts)
 		}
 		return NewPagerDutyCollectorFromOptions(pdOpts), nil
 	})
