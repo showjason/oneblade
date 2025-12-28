@@ -4,8 +4,13 @@ import (
 	"github.com/go-kratos/blades"
 )
 
+// ReportAgentConfig 报告生成 Agent 配置
+type ReportAgentConfig struct {
+	Model blades.ModelProvider
+}
+
 // NewReportAgent 创建报告生成 Agent
-func NewReportAgent(model blades.ModelProvider) (blades.Agent, error) {
+func NewReportAgent(cfg ReportAgentConfig) (blades.Agent, error) {
 	return blades.NewAgent(
 		"report_agent",
 		blades.WithDescription("负责汇总分析数据并生成巡检报告的 Agent"),
@@ -27,6 +32,6 @@ func NewReportAgent(model blades.ModelProvider) (blades.Agent, error) {
 7. 改进建议
 
 确保报告简洁、专业、可操作。`),
-		blades.WithModel(model),
+		blades.WithModel(cfg.Model),
 	)
 }

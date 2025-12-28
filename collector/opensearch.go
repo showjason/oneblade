@@ -6,11 +6,35 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/go-kratos/blades/tools"
-	"github.com/oneblade/config"
 	"github.com/opensearch-project/opensearch-go/v2"
 	"github.com/opensearch-project/opensearch-go/v2/opensearchapi"
 )
+
+func init() {
+	// 注册解析器（使用闭包调用泛型函数）
+	RegisterOptionsParser(CollectorOpenSearch, func(meta *toml.MetaData, primitive toml.Primitive) (interface{}, error) {
+		return ParseOptions[OpenSearchOptions](meta, primitive, CollectorOpenSearch)
+	})
+
+	// 注册 collector 工厂
+	RegisterCollector(CollectorOpenSearch, func(opts interface{}) (Collector, error) {
+		osOpts, ok := opts.(*OpenSearchOptions)
+		if !ok {
+			return nil, fmt.Errorf("invalid opensearch options type, got %T", opts)
+		}
+		return NewOpenSearchCollectorFromOptions(osOpts)
+	})
+}
+
+// OpenSearchOptions OpenSearch 采集器选项
+type OpenSearchOptions struct {
+	Addresses []string `toml:"addresses" validate:"required,min=1,dive,url"`
+	Username  string   `toml:"username"`
+	Password  string   `toml:"password"`
+	Index     string   `toml:"index" validate:"required"`
+}
 
 // OpenSearchCollector OpenSearch 采集器
 type OpenSearchCollector struct {
@@ -22,7 +46,7 @@ type OpenSearchCollector struct {
 }
 
 // NewOpenSearchCollectorFromOptions 从配置选项创建 OpenSearch 采集器
-func NewOpenSearchCollectorFromOptions(opts *config.OpenSearchOptions) (*OpenSearchCollector, error) {
+func NewOpenSearchCollectorFromOptions(opts *OpenSearchOptions) (*OpenSearchCollector, error) {
 	client, err := opensearch.NewClient(opensearch.Config{
 		Addresses: opts.Addresses,
 		Username:  opts.Username,
@@ -51,8 +75,8 @@ func (c *OpenSearchCollector) Description() string {
 
 // OpenSearchQueryInput OpenSearch 查询参数
 type OpenSearchQueryInput struct {
-	Index string          `json:"index,omitempty" jsonschema:"description=Index pattern to search (default: configured index)"`
-	Body  json.RawMessage `json:"body" jsonschema:"description=OpenSearch DSL query body (JSON)"`
+	Index string          `json:"index,omitempty" jsonschema:"Index pattern to search, defaults to configured index"`
+	Body  json.RawMessage `json:"body" jsonschema:"OpenSearch DSL query body in JSON format"`
 }
 
 // OpenSearchQueryOutput OpenSearch 查询结果
@@ -111,14 +135,4 @@ func (c *OpenSearchCollector) Health(ctx context.Context) error {
 
 func (c *OpenSearchCollector) Close() error {
 	return nil
-}
-
-func init() {
-	RegisterCollector(CollectorOpenSearch, func(opts interface{}) (Collector, error) {
-		osOpts, ok := opts.(*config.OpenSearchOptions)
-		if !ok {
-			return nil, fmt.Errorf("invalid opensearch options type, got %T", opts)
-		}
-		return NewOpenSearchCollectorFromOptions(osOpts)
-	})
 }

@@ -3,83 +3,96 @@ package config
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
-	"sync"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/go-playground/validator/v10"
-	"github.com/joho/godotenv"
 )
 
 // Loader 配置加载器
 type Loader struct {
-	baseDir   string
-	env       string
-	config    *Config
-	meta      *toml.MetaData
-	mu        sync.RWMutex
-	validator *validator.Validate
-	registry  *CollectorRegistry
+	configPath    string
+	config        *Config
+	collectorMeta map[string]*toml.MetaData
+	validator     *validator.Validate
 }
 
 // NewLoader 创建配置加载器
-// baseDir: 配置文件目录路径 (如 "./configs")
-func NewLoader(baseDir string) (*Loader, error) {
-	// 加载 .env 文件（如果存在）
-	envPath := filepath.Join(baseDir, ".env")
-	if _, err := os.Stat(envPath); err == nil {
-		if err := godotenv.Load(envPath); err != nil {
-			return nil, fmt.Errorf("load .env file: %w", err)
+// configPath: 配置文件路径 (如 "./config.toml")
+func NewLoader(configPath string) (*Loader, error) {
+	loader := &Loader{
+		configPath:    configPath,
+		validator:     validator.New(),
+		collectorMeta: make(map[string]*toml.MetaData),
+	}
+	return loader, nil
+}
+
+// checkDuplicateConfig 检查所有配置段是否重复定义（包括嵌套配置）
+func checkDuplicateConfig(meta toml.MetaData) error {
+	keys := meta.Keys()
+	defined := make(map[string]bool)
+
+	for _, key := range keys {
+		if len(key) == 0 {
+			continue
 		}
-	}
 
-	// 确定环境
-	env := os.Getenv("APP_ENV")
-	if env == "" {
-		env = "dev"
-	}
+		// 构建完整的配置路径，例如：
+		// - "server"
+		// - "data.database"
+		// - "data.redis"
+		// - "collectors.prometheus"
+		// - "collectors.prometheus.options"
+		configPath := strings.Join(key, ".")
 
-	return &Loader{
-		baseDir:   baseDir,
-		env:       env,
-		validator: validator.New(),
-		registry:  NewCollectorRegistry(),
-	}, nil
+		// 检查是否已定义
+		if defined[configPath] {
+			return fmt.Errorf("duplicate configuration \"%s\" defined", configPath)
+		}
+
+		defined[configPath] = true
+	}
+	return nil
+}
+
+// extractCollectorMeta 提取每个 collector 的元数据
+func (l *Loader) extractCollectorMeta(meta *toml.MetaData, cfg *Config) {
+	// 为每个 collector 保存元数据副本
+	for name := range cfg.Collectors {
+		metaCopy := *meta
+		l.collectorMeta[name] = &metaCopy
+	}
 }
 
 // Load 加载并解析配置
 func (l *Loader) Load() (*Config, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	// 1. 加载基础配置
-	basePath := filepath.Join(l.baseDir, "config.toml")
-	baseContent, err := l.loadAndExpand(basePath)
+	// 加载并展开环境变量
+	content, err := l.loadAndExpand(l.configPath)
 	if err != nil {
-		return nil, fmt.Errorf("load base config: %w", err)
+		return nil, fmt.Errorf("load config file %s: %w", l.configPath, err)
 	}
 
-	// 解析基础配置
+	// 解析配置
 	var cfg Config
-	meta, err := toml.Decode(baseContent, &cfg)
+	meta, err := toml.Decode(content, &cfg)
 	if err != nil {
-		return nil, fmt.Errorf("parse base config: %w", err)
+		return nil, fmt.Errorf("parse config file %s: %w", l.configPath, err)
 	}
 
-	// 2. 加载环境特定配置并合并
-	envPath := filepath.Join(l.baseDir, fmt.Sprintf("config.%s.toml", l.env))
-	if _, err := os.Stat(envPath); err == nil {
-		envContent, err := l.loadAndExpand(envPath)
-		if err != nil {
-			return nil, fmt.Errorf("load env config: %w", err)
-		}
-
-		// 解析并合并环境配置
-		if _, err := toml.Decode(envContent, &cfg); err != nil {
-			return nil, fmt.Errorf("parse env config: %w", err)
-		}
+	// 检查重复配置
+	if err := checkDuplicateConfig(meta); err != nil {
+		return nil, err
 	}
+
+	// 初始化 Collectors map（如果为 nil）
+	if cfg.Collectors == nil {
+		cfg.Collectors = make(map[string]CollectorConfig)
+	}
+
+	// 提取 collector 元数据
+	l.extractCollectorMeta(&meta, &cfg)
 
 	// 验证配置
 	if err := l.validate(&cfg); err != nil {
@@ -87,7 +100,6 @@ func (l *Loader) Load() (*Config, error) {
 	}
 
 	l.config = &cfg
-	l.meta = &meta
 	return &cfg, nil
 }
 
@@ -134,32 +146,40 @@ func (l *Loader) validate(cfg *Config) error {
 	return l.validator.Struct(cfg)
 }
 
-// Get 线程安全地获取当前配置
+// Get 获取当前配置
 func (l *Loader) Get() *Config {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
 	return l.config
 }
 
-// GetMeta 获取 TOML 元数据（用于延迟解析 Primitive）
-func (l *Loader) GetMeta() *toml.MetaData {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	return l.meta
+// GetCollectorMeta 获取指定 collector 的 TOML 元数据（用于延迟解析 Primitive）
+func (l *Loader) GetCollectorMeta(collectorName string) *toml.MetaData {
+	return l.collectorMeta[collectorName]
 }
 
-// Env 获取当前环境
-func (l *Loader) Env() string {
-	return l.env
+// ConfigPath 获取配置文件路径
+func (l *Loader) ConfigPath() string {
+	return l.configPath
 }
 
-// BaseDir 获取配置目录
-func (l *Loader) BaseDir() string {
-	return l.baseDir
-}
+// GetCollectorOptions 获取指定 collector 的原始配置数据
+func (l *Loader) GetCollectorOptions(collectorName string) (toml.Primitive, *toml.MetaData, error) {
+	cfg := l.config
+	if cfg == nil {
+		var zero toml.Primitive
+		return zero, nil, fmt.Errorf("config not loaded")
+	}
 
-// ParseCollectorOptions 解析 Collector 的 Options 到具体类型
-// 代理给内部的 registry
-func (l *Loader) ParseCollectorOptions(collectorType string, meta *toml.MetaData, primitive toml.Primitive) (interface{}, error) {
-	return l.registry.ParseOptions(collectorType, meta, primitive)
+	collectorCfg, ok := cfg.Collectors[collectorName]
+	if !ok {
+		var zero toml.Primitive
+		return zero, nil, fmt.Errorf("collector %s not found", collectorName)
+	}
+
+	meta := l.collectorMeta[collectorName]
+	if meta == nil {
+		var zero toml.Primitive
+		return zero, nil, fmt.Errorf("no metadata for collector %s", collectorName)
+	}
+
+	return collectorCfg.Options, meta, nil
 }

@@ -7,16 +7,16 @@ import (
 	"github.com/oneblade/collector"
 )
 
-// OrchestratorConfig 编排 Agent 配置
+// Orchestrator 编排 Agent 配置
 type OrchestratorConfig struct {
-	Model    blades.ModelProvider
-	Registry *collector.Registry
+	Model      blades.ModelProvider
+	Collectors []collector.Collector
 }
 
 // NewOrchestratorAgent 创建主编排 Agent
 func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 	// 从 Registry 获取所有 Collectors
-	collectors := cfg.Registry.All()
+	collectors := cfg.Collectors
 
 	// 创建统一数据采集 Agent
 	dataCollectionAgent, err := NewDataCollectionAgent(DataCollectionAgentConfig{
@@ -27,12 +27,16 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 		return nil, err
 	}
 
-	reportAgent, err := NewReportAgent(cfg.Model)
+	reportAgent, err := NewReportAgent(ReportAgentConfig{
+		Model: cfg.Model,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	predictionAgent, err := NewPredictionAgent(cfg.Model)
+	predictionAgent, err := NewPredictionAgent(PredictionAgentConfig{
+		Model: cfg.Model,
+	})
 	if err != nil {
 		return nil, err
 	}

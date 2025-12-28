@@ -1,9 +1,5 @@
-# OneBlade SRE Agent 基础配置
+# OneBlade SRE Agent 配置
 # 敏感信息请使用环境变量，格式：${VAR} 或 ${VAR:default}
-
-[app]
-name = "oneblade"
-log_level = "info"
 
 [server]
 addr = ":8080"
@@ -40,4 +36,3 @@ addresses = ["${OPENSEARCH_URL:http://localhost:9200}"]
 username = "${OPENSEARCH_USER}"
 password = "${OPENSEARCH_PASS}"
 index = "logs-*"
-

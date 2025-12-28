@@ -5,11 +5,34 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/go-kratos/blades/tools"
-	"github.com/oneblade/config"
+	"github.com/oneblade/utils"
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 )
+
+func init() {
+	// 注册解析器（使用闭包调用泛型函数）
+	RegisterOptionsParser(CollectorPrometheus, func(meta *toml.MetaData, primitive toml.Primitive) (interface{}, error) {
+		return ParseOptions[PrometheusOptions](meta, primitive, CollectorPrometheus)
+	})
+
+	// 注册 collector 工厂
+	RegisterCollector(CollectorPrometheus, func(opts interface{}) (Collector, error) {
+		promOpts, ok := opts.(*PrometheusOptions)
+		if !ok {
+			return nil, fmt.Errorf("invalid prometheus options type, got %T", opts)
+		}
+		return NewPrometheusCollectorFromOptions(promOpts)
+	})
+}
+
+// PrometheusOptions Prometheus 采集器选项
+type PrometheusOptions struct {
+	Address string         `toml:"address" validate:"required,url"`
+	Timeout utils.Duration `toml:"timeout"`
+}
 
 // PrometheusCollector Prometheus 采集器
 type PrometheusCollector struct {
@@ -20,7 +43,7 @@ type PrometheusCollector struct {
 }
 
 // NewPrometheusCollectorFromOptions 从配置选项创建 Prometheus 采集器
-func NewPrometheusCollectorFromOptions(opts *config.PrometheusOptions) (*PrometheusCollector, error) {
+func NewPrometheusCollectorFromOptions(opts *PrometheusOptions) (*PrometheusCollector, error) {
 	client, err := api.NewClient(api.Config{Address: opts.Address})
 	if err != nil {
 		return nil, fmt.Errorf("create prometheus client: %w", err)
@@ -44,10 +67,10 @@ func (c *PrometheusCollector) Description() string {
 
 // PrometheusQueryInput Prometheus 查询参数（给 LLM 使用）
 type PrometheusQueryInput struct {
-	PromQL    string `json:"promql" jsonschema:"description=PromQL query expression"`
-	StartTime string `json:"start_time" jsonschema:"description=Start time in RFC3339 format"`
-	EndTime   string `json:"end_time" jsonschema:"description=End time in RFC3339 format"`
-	Step      string `json:"step,omitempty" jsonschema:"description=Query step duration (e.g. 1m, 5m)"`
+	PromQL    string `json:"promql" jsonschema:"PromQL query expression"`
+	StartTime string `json:"start_time" jsonschema:"Start time in RFC3339 format"`
+	EndTime   string `json:"end_time" jsonschema:"End time in RFC3339 format"`
+	Step      string `json:"step,omitempty" jsonschema:"Query step duration, e.g. 1m or 5m"`
 }
 
 // PrometheusQueryOutput Prometheus 查询结果
@@ -109,14 +132,4 @@ func (c *PrometheusCollector) Health(ctx context.Context) error {
 
 func (c *PrometheusCollector) Close() error {
 	return nil
-}
-
-func init() {
-	RegisterCollector(CollectorPrometheus, func(opts interface{}) (Collector, error) {
-		promOpts, ok := opts.(*config.PrometheusOptions)
-		if !ok {
-			return nil, fmt.Errorf("invalid prometheus options type, got %T", opts)
-		}
-		return NewPrometheusCollectorFromOptions(promOpts)
-	})
 }

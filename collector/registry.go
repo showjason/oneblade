@@ -8,16 +8,16 @@ import (
 	"github.com/oneblade/config"
 )
 
-type collector func(opts interface{}) (Collector, error)
+type CollectorFactory func(opts interface{}) (Collector, error)
 
 var collectorRegistry = struct {
 	mu         sync.RWMutex
-	collectors map[CollectorType]collector
+	collectors map[CollectorType]CollectorFactory
 }{
-	collectors: make(map[CollectorType]collector),
+	collectors: make(map[CollectorType]CollectorFactory),
 }
 
-func RegisterCollector(collectorType CollectorType, collector collector) {
+func RegisterCollector(collectorType CollectorType, collector CollectorFactory) {
 	collectorRegistry.mu.Lock()
 	defer collectorRegistry.mu.Unlock()
 
@@ -29,7 +29,7 @@ func RegisterCollector(collectorType CollectorType, collector collector) {
 	collectorRegistry.collectors[collectorType] = collector
 }
 
-func getCollector(collectorType CollectorType) (collector, bool) {
+func getCollector(collectorType CollectorType) (CollectorFactory, bool) {
 	collectorRegistry.mu.RLock()
 	defer collectorRegistry.mu.RUnlock()
 
@@ -59,7 +59,6 @@ func (r *Registry) InitFromConfig(loader *config.Loader) error {
 	}
 
 	r.loader = loader
-	meta := loader.GetMeta()
 
 	for name, collectorCfg := range cfg.Collectors {
 		if !collectorCfg.Enabled {
@@ -67,12 +66,26 @@ func (r *Registry) InitFromConfig(loader *config.Loader) error {
 			continue
 		}
 
-		opts, err := loader.ParseCollectorOptions(collectorCfg.Type, meta, collectorCfg.Options)
+		// 获取原始配置数据
+		primitive, meta, err := loader.GetCollectorOptions(name)
+		if err != nil {
+			return fmt.Errorf("get options for %s: %w", name, err)
+		}
+
+		// 获取解析器
+		collectorType := CollectorType(collectorCfg.Type)
+		parser, ok := GetOptionsParser(collectorType)
+		if !ok {
+			return fmt.Errorf("no parser registered for collector type: %s", collectorType)
+		}
+
+		// 统一调用解析器
+		opts, err := parser(meta, primitive)
 		if err != nil {
 			return fmt.Errorf("parse options for %s: %w", name, err)
 		}
 
-		collectorType := CollectorType(collectorCfg.Type)
+		// 创建 collector
 		collector, err := r.createCollector(collectorType, opts)
 		if err != nil {
 			return fmt.Errorf("create collector %s: %w", name, err)
