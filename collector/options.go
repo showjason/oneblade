@@ -33,7 +33,7 @@ func GetOptionsParser(collectorType CollectorType) (OptionsParser, bool) {
 }
 
 // ParseOptions 泛型函数：解析 TOML Primitive 到具体的配置结构
-func ParseOptions[T any](meta *toml.MetaData, primitive toml.Primitive, typeName string) (*T, error) {
+func ParseOptions[T any](meta *toml.MetaData, primitive toml.Primitive, typeName CollectorType) (*T, error) {
 	var opts T
 	if err := meta.PrimitiveDecode(primitive, &opts); err != nil {
 		return nil, fmt.Errorf("decode %s options: %w", typeName, err)

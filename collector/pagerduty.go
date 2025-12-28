@@ -9,6 +9,22 @@ import (
 	"github.com/go-kratos/blades/tools"
 )
 
+func init() {
+	// 注册解析器（使用闭包调用泛型函数）
+	RegisterOptionsParser(CollectorPagerDuty, func(meta *toml.MetaData, primitive toml.Primitive) (interface{}, error) {
+		return ParseOptions[PagerDutyOptions](meta, primitive, CollectorPagerDuty)
+	})
+
+	// 注册 collector 工厂
+	RegisterCollector(CollectorPagerDuty, func(opts interface{}) (Collector, error) {
+		pdOpts, ok := opts.(*PagerDutyOptions)
+		if !ok {
+			return nil, fmt.Errorf("invalid pagerduty options type, got %T", opts)
+		}
+		return NewPagerDutyCollectorFromOptions(pdOpts), nil
+	})
+}
+
 // PagerDutyOptions PagerDuty 采集器选项
 type PagerDutyOptions struct {
 	APIKey string `toml:"api_key" validate:"required"`
@@ -98,20 +114,4 @@ func (c *PagerDutyCollector) Health(ctx context.Context) error {
 
 func (c *PagerDutyCollector) Close() error {
 	return nil
-}
-
-func init() {
-	// 注册解析器（使用闭包调用泛型函数）
-	RegisterOptionsParser(CollectorPagerDuty, func(meta *toml.MetaData, primitive toml.Primitive) (interface{}, error) {
-		return ParseOptions[PagerDutyOptions](meta, primitive, "pagerduty")
-	})
-
-	// 注册 collector 工厂
-	RegisterCollector(CollectorPagerDuty, func(opts interface{}) (Collector, error) {
-		pdOpts, ok := opts.(*PagerDutyOptions)
-		if !ok {
-			return nil, fmt.Errorf("invalid pagerduty options type, got %T", opts)
-		}
-		return NewPagerDutyCollectorFromOptions(pdOpts), nil
-	})
 }

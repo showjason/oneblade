@@ -12,6 +12,22 @@ import (
 	"github.com/opensearch-project/opensearch-go/v2/opensearchapi"
 )
 
+func init() {
+	// 注册解析器（使用闭包调用泛型函数）
+	RegisterOptionsParser(CollectorOpenSearch, func(meta *toml.MetaData, primitive toml.Primitive) (interface{}, error) {
+		return ParseOptions[OpenSearchOptions](meta, primitive, CollectorOpenSearch)
+	})
+
+	// 注册 collector 工厂
+	RegisterCollector(CollectorOpenSearch, func(opts interface{}) (Collector, error) {
+		osOpts, ok := opts.(*OpenSearchOptions)
+		if !ok {
+			return nil, fmt.Errorf("invalid opensearch options type, got %T", opts)
+		}
+		return NewOpenSearchCollectorFromOptions(osOpts)
+	})
+}
+
 // OpenSearchOptions OpenSearch 采集器选项
 type OpenSearchOptions struct {
 	Addresses []string `toml:"addresses" validate:"required,min=1,dive,url"`
@@ -119,20 +135,4 @@ func (c *OpenSearchCollector) Health(ctx context.Context) error {
 
 func (c *OpenSearchCollector) Close() error {
 	return nil
-}
-
-func init() {
-	// 注册解析器（使用闭包调用泛型函数）
-	RegisterOptionsParser(CollectorOpenSearch, func(meta *toml.MetaData, primitive toml.Primitive) (interface{}, error) {
-		return ParseOptions[OpenSearchOptions](meta, primitive, "opensearch")
-	})
-
-	// 注册 collector 工厂
-	RegisterCollector(CollectorOpenSearch, func(opts interface{}) (Collector, error) {
-		osOpts, ok := opts.(*OpenSearchOptions)
-		if !ok {
-			return nil, fmt.Errorf("invalid opensearch options type, got %T", opts)
-		}
-		return NewOpenSearchCollectorFromOptions(osOpts)
-	})
 }

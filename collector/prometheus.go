@@ -12,9 +12,25 @@ import (
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 )
 
+func init() {
+	// 注册解析器（使用闭包调用泛型函数）
+	RegisterOptionsParser(CollectorPrometheus, func(meta *toml.MetaData, primitive toml.Primitive) (interface{}, error) {
+		return ParseOptions[PrometheusOptions](meta, primitive, CollectorPrometheus)
+	})
+
+	// 注册 collector 工厂
+	RegisterCollector(CollectorPrometheus, func(opts interface{}) (Collector, error) {
+		promOpts, ok := opts.(*PrometheusOptions)
+		if !ok {
+			return nil, fmt.Errorf("invalid prometheus options type, got %T", opts)
+		}
+		return NewPrometheusCollectorFromOptions(promOpts)
+	})
+}
+
 // PrometheusOptions Prometheus 采集器选项
 type PrometheusOptions struct {
-	Address string        `toml:"address" validate:"required,url"`
+	Address string         `toml:"address" validate:"required,url"`
 	Timeout utils.Duration `toml:"timeout"`
 }
 
@@ -116,20 +132,4 @@ func (c *PrometheusCollector) Health(ctx context.Context) error {
 
 func (c *PrometheusCollector) Close() error {
 	return nil
-}
-
-func init() {
-	// 注册解析器（使用闭包调用泛型函数）
-	RegisterOptionsParser(CollectorPrometheus, func(meta *toml.MetaData, primitive toml.Primitive) (interface{}, error) {
-		return ParseOptions[PrometheusOptions](meta, primitive, "prometheus")
-	})
-
-	// 注册 collector 工厂
-	RegisterCollector(CollectorPrometheus, func(opts interface{}) (Collector, error) {
-		promOpts, ok := opts.(*PrometheusOptions)
-		if !ok {
-			return nil, fmt.Errorf("invalid prometheus options type, got %T", opts)
-		}
-		return NewPrometheusCollectorFromOptions(promOpts)
-	})
 }
