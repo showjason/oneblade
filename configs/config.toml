@@ -3,8 +3,6 @@
 
 [app]
 name = "oneblade"
-env = "${APP_ENV:dev}"
-debug = false
 log_level = "info"
 
 [server]

@@ -26,14 +26,6 @@ type Loader struct {
 // NewLoader 创建配置加载器
 // baseDir: 配置文件目录路径 (如 "./configs")
 func NewLoader(baseDir string) (*Loader, error) {
-	// 加载 .env 文件（如果存在）
-	envPath := filepath.Join(baseDir, ".env")
-	if _, err := os.Stat(envPath); err == nil {
-		if err := godotenv.Load(envPath); err != nil {
-			return nil, fmt.Errorf("load .env file: %w", err)
-		}
-	}
-
 	loader := &Loader{
 		baseDir:       baseDir,
 		validator:     validator.New(),
@@ -127,6 +119,16 @@ func (l *Loader) Load() (*Config, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	// 加载 .env 文件（如果存在）
+	// 注意：godotenv.Load() 不会覆盖已存在的环境变量（如通过 export 设置的）
+	// 因此系统环境变量优先级更高
+	envPath := filepath.Join(l.baseDir, ".env")
+	if _, err := os.Stat(envPath); err == nil {
+		if err := godotenv.Load(envPath); err != nil {
+			return nil, fmt.Errorf("load .env file: %w", err)
+		}
+	}
+
 	// 扫描配置目录获取所有 .toml 文件
 	files, err := scanConfigFiles(l.baseDir)
 	if err != nil {
@@ -138,8 +140,8 @@ func (l *Loader) Load() (*Config, error) {
 	cfg.Collectors = make(map[string]CollectorConfig)
 	l.collectorMeta = make(map[string]*toml.MetaData)
 
-	nonCollectorDefined := make(map[string]string)  // 记录非 collector 配置段首次定义的文件
-	collectorDefined := make(map[string]string)     // 记录 collector 首次定义的文件
+	nonCollectorConfig := make(map[string]string) // 记录非 collector 配置段首次定义的文件
+	collectorConfig := make(map[string]string)    // 记录 collector 首次定义的文件
 
 	// 遍历每个配置文件
 	for _, filePath := range files {
@@ -157,25 +159,25 @@ func (l *Loader) Load() (*Config, error) {
 		}
 
 		// 检查非 collector 配置的重复定义
-		if err := checkNonCollectorConfig(meta, nonCollectorDefined, filePath); err != nil {
+		if err := checkNonCollectorConfig(meta, nonCollectorConfig, filePath); err != nil {
 			return nil, err
 		}
 
 		// 合并非 collector 配置（只取首次定义）
-		if _, exists := nonCollectorDefined["app"]; exists && nonCollectorDefined["app"] == filePath {
+		if _, exists := nonCollectorConfig["app"]; exists && nonCollectorConfig["app"] == filePath {
 			cfg.App = tempCfg.App
 		}
-		if _, exists := nonCollectorDefined["server"]; exists && nonCollectorDefined["server"] == filePath {
+		if _, exists := nonCollectorConfig["server"]; exists && nonCollectorConfig["server"] == filePath {
 			cfg.Server = tempCfg.Server
 		}
-		if _, exists := nonCollectorDefined["data"]; exists && nonCollectorDefined["data"] == filePath {
+		if _, exists := nonCollectorConfig["data"]; exists && nonCollectorConfig["data"] == filePath {
 			cfg.Data = tempCfg.Data
 		}
 
 		// 合并 collector 配置
 		if tempCfg.Collectors != nil {
 			metaCopy := meta
-			if err := mergeCollectors(cfg.Collectors, tempCfg.Collectors, filePath, collectorDefined, l.collectorMeta, &metaCopy); err != nil {
+			if err := mergeCollectors(cfg.Collectors, tempCfg.Collectors, filePath, collectorConfig, l.collectorMeta, &metaCopy); err != nil {
 				return nil, err
 			}
 		}

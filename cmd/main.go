@@ -30,7 +30,7 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	log.Printf("[main] loaded config for env: %s", cfg.App.Env)
+	log.Printf("[main] loaded config for app: %s", cfg.App.Name)
 
 	// 初始化 LLM Model（仍然从环境变量读取，因为是敏感信息）
 	model := openai.NewModel(os.Getenv("OPENAI_MODEL"), openai.Config{
