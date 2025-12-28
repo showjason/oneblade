@@ -75,8 +75,8 @@ func (c *OpenSearchCollector) Description() string {
 
 // OpenSearchQueryInput OpenSearch 查询参数
 type OpenSearchQueryInput struct {
-	Index string          `json:"index,omitempty" jsonschema:"description=Index pattern to search (default: configured index)"`
-	Body  json.RawMessage `json:"body" jsonschema:"description=OpenSearch DSL query body (JSON)"`
+	Index string          `json:"index,omitempty" jsonschema:"Index pattern to search, defaults to configured index"`
+	Body  json.RawMessage `json:"body" jsonschema:"OpenSearch DSL query body in JSON format"`
 }
 
 // OpenSearchQueryOutput OpenSearch 查询结果

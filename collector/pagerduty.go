@@ -54,18 +54,29 @@ func (c *PagerDutyCollector) Description() string {
 
 // PagerDutyQueryInput PagerDuty 查询参数
 type PagerDutyQueryInput struct {
-	ResourceType string   `json:"resource_type" jsonschema:"description=Resource to fetch: incidents or alerts,enum=incidents,enum=alerts"`
-	Since        string   `json:"since" jsonschema:"description=Start time in RFC3339 format"`
-	Until        string   `json:"until" jsonschema:"description=End time in RFC3339 format"`
-	ServiceIDs   []string `json:"service_ids,omitempty" jsonschema:"description=Filter by service IDs"`
-	Statuses     []string `json:"statuses,omitempty" jsonschema:"description=Filter by statuses: triggered, acknowledged, resolved"`
-	Limit        int      `json:"limit,omitempty" jsonschema:"description=Maximum number of results"`
+	ResourceType string   `json:"resource_type" jsonschema:"Resource to fetch: incidents or alerts"`
+	Since        string   `json:"since" jsonschema:"Start time in RFC3339 format"`
+	Until        string   `json:"until" jsonschema:"End time in RFC3339 format"`
+	ServiceIDs   []string `json:"service_ids,omitempty" jsonschema:"Filter by service IDs"`
+	Statuses     []string `json:"statuses,omitempty" jsonschema:"Filter by statuses: triggered, acknowledged, resolved"`
+	Limit        int      `json:"limit,omitempty" jsonschema:"Maximum number of results"`
+}
+
+// PagerDutyIncident simplified incident structure to avoid cycle
+type PagerDutyIncident struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Status      string `json:"status"`
+	Urgency     string `json:"urgency"`
+	ServiceName string `json:"service_name"`
+	CreatedAt   string `json:"created_at"`
+	HTMLURL     string `json:"html_url"`
 }
 
 // PagerDutyQueryOutput PagerDuty 查询结果
 type PagerDutyQueryOutput struct {
-	Incidents []pagerduty.Incident `json:"incidents"`
-	Total     int                  `json:"total"`
+	Incidents []PagerDutyIncident `json:"incidents"`
+	Total     int                 `json:"total"`
 }
 
 // Handle 处理 PagerDuty 查询请求
@@ -93,9 +104,23 @@ func (c *PagerDutyCollector) Handle(ctx context.Context, input PagerDutyQueryInp
 		return PagerDutyQueryOutput{}, fmt.Errorf("pagerduty api: %w", err)
 	}
 
+	// Convert to simplified incident type to avoid cycle
+	incidents := make([]PagerDutyIncident, len(resp.Incidents))
+	for i, inc := range resp.Incidents {
+		incidents[i] = PagerDutyIncident{
+			ID:          inc.ID,
+			Title:       inc.Title,
+			Status:      inc.Status,
+			Urgency:     inc.Urgency,
+			ServiceName: inc.Service.Summary,
+			CreatedAt:   inc.CreatedAt,
+			HTMLURL:     inc.HTMLURL,
+		}
+	}
+
 	return PagerDutyQueryOutput{
-		Incidents: resp.Incidents,
-		Total:     len(resp.Incidents),
+		Incidents: incidents,
+		Total:     len(incidents),
 	}, nil
 }
 

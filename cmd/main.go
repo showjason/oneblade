@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -16,21 +17,25 @@ import (
 )
 
 func main() {
+	// 解析命令行参数
+	configPath := flag.String("config", "./config.toml", "配置文件路径")
+	flag.Parse()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// 加载配置
-	loader, err := config.NewLoader("./configs")
+	loader, err := config.NewLoader(*configPath)
 	if err != nil {
 		log.Fatalf("failed to create config loader: %v", err)
 	}
 
-	cfg, err := loader.Load()
+	_, err = loader.Load()
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	log.Printf("[main] loaded config for app: %s", cfg.App.Name)
+	log.Printf("[main] loaded config from: %s", *configPath)
 
 	// 初始化 LLM Model（仍然从环境变量读取，因为是敏感信息）
 	model := openai.NewModel(os.Getenv("OPENAI_MODEL"), openai.Config{
@@ -46,7 +51,7 @@ func main() {
 
 	// 创建 Orchestrator Agent
 	orchestrator, err := agent.NewOrchestratorAgent(agent.OrchestratorConfig{
-		Model:    model,
+		Model:      model,
 		Collectors: registry.All(),
 	})
 	if err != nil {

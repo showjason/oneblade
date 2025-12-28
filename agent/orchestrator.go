@@ -8,19 +8,19 @@ import (
 )
 
 // Orchestrator 编排 Agent 配置
-type Orchestrator struct {
-	Model    blades.ModelProvider
+type OrchestratorConfig struct {
+	Model      blades.ModelProvider
 	Collectors []collector.Collector
 }
 
 // NewOrchestratorAgent 创建主编排 Agent
-func NewOrchestratorAgent(o Orchestrator) (blades.Agent, error) {
+func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 	// 从 Registry 获取所有 Collectors
-	collectors := o.Collectors
+	collectors := cfg.Collectors
 
 	// 创建统一数据采集 Agent
 	dataCollectionAgent, err := NewDataCollectionAgent(DataCollectionAgentConfig{
-		Model:      o.Model,
+		Model:      cfg.Model,
 		Collectors: collectors,
 	})
 	if err != nil {
@@ -28,14 +28,14 @@ func NewOrchestratorAgent(o Orchestrator) (blades.Agent, error) {
 	}
 
 	reportAgent, err := NewReportAgent(ReportAgentConfig{
-		Model: o.Model,
+		Model: cfg.Model,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	predictionAgent, err := NewPredictionAgent(PredictionAgentConfig{
-		Model: o.Model,
+		Model: cfg.Model,
 	})
 	if err != nil {
 		return nil, err
@@ -56,7 +56,7 @@ func NewOrchestratorAgent(o Orchestrator) (blades.Agent, error) {
 	return flow.NewRoutingAgent(flow.RoutingConfig{
 		Name:        "sre_orchestrator",
 		Description: "SRE 智能巡检系统主控 Agent",
-		Model:       o.Model,
+		Model:       cfg.Model,
 		SubAgents: []blades.Agent{
 			analysisAgent,
 			dataCollectionAgent,

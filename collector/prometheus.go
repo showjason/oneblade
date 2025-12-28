@@ -67,10 +67,10 @@ func (c *PrometheusCollector) Description() string {
 
 // PrometheusQueryInput Prometheus 查询参数（给 LLM 使用）
 type PrometheusQueryInput struct {
-	PromQL    string `json:"promql" jsonschema:"description=PromQL query expression"`
-	StartTime string `json:"start_time" jsonschema:"description=Start time in RFC3339 format"`
-	EndTime   string `json:"end_time" jsonschema:"description=End time in RFC3339 format"`
-	Step      string `json:"step,omitempty" jsonschema:"description=Query step duration (e.g. 1m, 5m)"`
+	PromQL    string `json:"promql" jsonschema:"PromQL query expression"`
+	StartTime string `json:"start_time" jsonschema:"Start time in RFC3339 format"`
+	EndTime   string `json:"end_time" jsonschema:"End time in RFC3339 format"`
+	Step      string `json:"step,omitempty" jsonschema:"Query step duration, e.g. 1m or 5m"`
 }
 
 // PrometheusQueryOutput Prometheus 查询结果

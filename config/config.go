@@ -7,16 +7,9 @@ import (
 
 // Config 根配置结构
 type Config struct {
-	App        AppConfig                  `toml:"app" validate:"required"`
 	Server     ServerConfig               `toml:"server" validate:"required"`
 	Data       DataConfig                 `toml:"data"`
 	Collectors map[string]CollectorConfig `toml:"collectors" validate:"dive"`
-}
-
-// AppConfig 应用全局配置
-type AppConfig struct {
-	Name     string `toml:"name" validate:"required,alpha"`
-	LogLevel string `toml:"log_level" validate:"required,oneof=debug info warn error"`
 }
 
 // ServerConfig 服务器配置
