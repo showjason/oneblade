@@ -12,8 +12,13 @@ import (
 	"github.com/go-kratos/blades/contrib/openai"
 
 	"github.com/oneblade/agent"
-	"github.com/oneblade/collector"
 	"github.com/oneblade/config"
+	"github.com/oneblade/service"
+
+	// registry imports services to register init functions
+	_ "github.com/oneblade/service/opensearch"
+	_ "github.com/oneblade/service/pagerduty"
+	_ "github.com/oneblade/service/prometheus"
 )
 
 func main() {
@@ -43,17 +48,17 @@ func main() {
 		APIKey: os.Getenv("OPENAI_API_KEY"),
 	})
 
-	// 初始化 Collector Registry
-	registry := collector.NewRegistry()
+	// 初始化 Service Registry
+	registry := service.NewRegistry()
 	if err := registry.InitFromConfig(loader); err != nil {
-		log.Fatalf("failed to init collectors: %v", err)
+		log.Fatalf("failed to init services: %v", err)
 	}
 	defer registry.Close()
 
 	// 创建 Orchestrator Agent
 	orchestrator, err := agent.NewOrchestratorAgent(agent.OrchestratorConfig{
-		Model:      model,
-		Collectors: registry.All(),
+		Model:    model,
+		Services: registry.All(),
 	})
 	if err != nil {
 		log.Fatalf("failed to create orchestrator agent: %v", err)

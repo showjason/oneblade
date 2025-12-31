@@ -1,4 +1,4 @@
-package collector
+package service
 
 import (
 	"fmt"
@@ -12,28 +12,28 @@ type OptionsParser func(meta *toml.MetaData, primitive toml.Primitive) (interfac
 
 var optionsParsers = struct {
 	mu      sync.RWMutex
-	parsers map[CollectorType]OptionsParser
+	parsers map[ServiceType]OptionsParser
 }{
-	parsers: make(map[CollectorType]OptionsParser),
+	parsers: make(map[ServiceType]OptionsParser),
 }
 
 // RegisterOptionsParser 注册 Options 解析器
-func RegisterOptionsParser(collectorType CollectorType, parser OptionsParser) {
+func RegisterOptionsParser(serviceType ServiceType, parser OptionsParser) {
 	optionsParsers.mu.Lock()
 	defer optionsParsers.mu.Unlock()
-	optionsParsers.parsers[collectorType] = parser
+	optionsParsers.parsers[serviceType] = parser
 }
 
 // GetOptionsParser 获取解析器
-func GetOptionsParser(collectorType CollectorType) (OptionsParser, bool) {
+func GetOptionsParser(serviceType ServiceType) (OptionsParser, bool) {
 	optionsParsers.mu.RLock()
 	defer optionsParsers.mu.RUnlock()
-	parser, ok := optionsParsers.parsers[collectorType]
+	parser, ok := optionsParsers.parsers[serviceType]
 	return parser, ok
 }
 
 // ParseOptions 泛型函数：解析 TOML Primitive 到具体的配置结构
-func ParseOptions[T any](meta *toml.MetaData, primitive toml.Primitive, typeName CollectorType) (*T, error) {
+func ParseOptions[T any](meta *toml.MetaData, primitive toml.Primitive, typeName ServiceType) (*T, error) {
 	var opts T
 	if err := meta.PrimitiveDecode(primitive, &opts); err != nil {
 		return nil, fmt.Errorf("decode %s options: %w", typeName, err)

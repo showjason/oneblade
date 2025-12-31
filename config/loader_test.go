@@ -3,13 +3,53 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// createTempConfig 创建临时配置文件并返回路径
+func createTempConfig(t *testing.T, content string) string {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+	err := os.WriteFile(configPath, []byte(content), 0644)
+	require.NoError(t, err)
+	return configPath
+}
+
+// setupEnvVars 设置环境变量并返回清理函数
+func setupEnvVars(t *testing.T, vars map[string]string) func() {
+	originalVars := make(map[string]string)
+	for k, v := range vars {
+		originalVars[k] = os.Getenv(k)
+		os.Setenv(k, v)
+	}
+	return func() {
+		for k, originalVal := range originalVars {
+			if originalVal == "" {
+				os.Unsetenv(k)
+			} else {
+				os.Setenv(k, originalVal)
+			}
+		}
+	}
+}
+
+// containsAny 检查字符串是否包含任意一个子字符串
+func containsAny(s string, substrings []string) bool {
+	for _, substr := range substrings {
+		if strings.Contains(s, substr) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestNewLoader 测试创建配置加载器
+// 验证加载器能正确创建并保存配置文件路径
 func TestNewLoader(t *testing.T) {
 	loader, err := NewLoader("./test.toml")
 	require.NoError(t, err)
@@ -17,11 +57,9 @@ func TestNewLoader(t *testing.T) {
 	assert.Equal(t, "./test.toml", loader.ConfigPath())
 }
 
+// TestLoader_Load_ValidConfig 测试加载有效配置
+// 验证配置能正确解析并包含所有预期的字段和值
 func TestLoader_Load_ValidConfig(t *testing.T) {
-	// Create a temporary config file
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
-
 	configContent := `
 [server]
 addr = "localhost:8080"
@@ -36,16 +74,15 @@ addr = "localhost:6379"
 read_timeout = "5s"
 write_timeout = "5s"
 
-[collectors.prometheus]
+[services.prometheus]
 type = "prometheus"
 enabled = true
 
-[collectors.pagerduty]
+[services.pagerduty]
 type = "pagerduty"
 enabled = false
 `
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
-	require.NoError(t, err)
+	configPath := createTempConfig(t, configContent)
 
 	loader, err := NewLoader(configPath)
 	require.NoError(t, err)
@@ -54,26 +91,28 @@ enabled = false
 	require.NoError(t, err)
 	assert.NotNil(t, cfg)
 	assert.Equal(t, "localhost:8080", cfg.Server.Addr)
-	assert.True(t, cfg.Collectors["prometheus"].Enabled)
-	assert.False(t, cfg.Collectors["pagerduty"].Enabled)
+	assert.True(t, cfg.Services["prometheus"].Enabled)
+	assert.False(t, cfg.Services["pagerduty"].Enabled)
 }
 
+// TestLoader_Load_FileNotFound 测试文件不存在的情况
+// 验证错误消息包含文件路径和明确的错误信息
 func TestLoader_Load_FileNotFound(t *testing.T) {
-	loader, err := NewLoader("/nonexistent/config.toml")
+	nonExistentPath := "/nonexistent/config.toml"
+	loader, err := NewLoader(nonExistentPath)
 	require.NoError(t, err)
 
 	_, err = loader.Load()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "load config file")
+	assert.Contains(t, err.Error(), nonExistentPath)
 }
 
+// TestLoader_Load_InvalidTOML 测试无效的 TOML 格式
+// 验证解析错误能被正确捕获并返回明确的错误信息
 func TestLoader_Load_InvalidTOML(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
-
 	configContent := `invalid toml content [`
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
-	require.NoError(t, err)
+	configPath := createTempConfig(t, configContent)
 
 	loader, err := NewLoader(configPath)
 	require.NoError(t, err)
@@ -81,47 +120,86 @@ func TestLoader_Load_InvalidTOML(t *testing.T) {
 	_, err = loader.Load()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parse config file")
+	assert.Contains(t, err.Error(), configPath)
 }
 
+// TestLoader_Load_WithEnvVars 测试环境变量替换功能
+// 使用表驱动测试覆盖多种环境变量场景
 func TestLoader_Load_WithEnvVars(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
-
-	configContent := `
+	tests := []struct {
+		name            string
+		configContent   string
+		envVars         map[string]string
+		expectedAddr    string
+		expectedTimeout time.Duration
+	}{
+		{
+			name: "使用默认值",
+			configContent: `
 [server]
 addr = "${SERVER_ADDR:localhost:8080}"
 timeout = "${TIMEOUT:30s}"
 
-[collectors.prometheus]
+[services.prometheus]
 type = "prometheus"
 enabled = true
-`
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
-	require.NoError(t, err)
+`,
+			envVars:         map[string]string{},
+			expectedAddr:    "localhost:8080",
+			expectedTimeout: 30 * time.Second,
+		},
+		{
+			name: "环境变量覆盖默认值",
+			configContent: `
+[server]
+addr = "${SERVER_ADDR:localhost:8080}"
+timeout = "${TIMEOUT:30s}"
 
-	// Test with default values
-	loader, err := NewLoader(configPath)
-	require.NoError(t, err)
+[services.prometheus]
+type = "prometheus"
+enabled = true
+`,
+			envVars:         map[string]string{"SERVER_ADDR": "0.0.0.0:9090", "TIMEOUT": "60s"},
+			expectedAddr:    "0.0.0.0:9090",
+			expectedTimeout: 60 * time.Second,
+		},
+		{
+			name: "部分环境变量设置",
+			configContent: `
+[server]
+addr = "${SERVER_ADDR:localhost:8080}"
+timeout = "${TIMEOUT:30s}"
 
-	cfg, err := loader.Load()
-	require.NoError(t, err)
-	assert.Equal(t, "localhost:8080", cfg.Server.Addr)
+[services.prometheus]
+type = "prometheus"
+enabled = true
+`,
+			envVars:         map[string]string{"SERVER_ADDR": "127.0.0.1:8080"},
+			expectedAddr:    "127.0.0.1:8080",
+			expectedTimeout: 30 * time.Second,
+		},
+	}
 
-	// Test with environment variables set
-	os.Setenv("SERVER_ADDR", "0.0.0.0:9090")
-	os.Setenv("TIMEOUT", "60s")
-	defer os.Unsetenv("SERVER_ADDR")
-	defer os.Unsetenv("TIMEOUT")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configPath := createTempConfig(t, tt.configContent)
+			cleanup := setupEnvVars(t, tt.envVars)
+			defer cleanup()
 
-	loader2, err := NewLoader(configPath)
-	require.NoError(t, err)
+			loader, err := NewLoader(configPath)
+			require.NoError(t, err)
 
-	cfg2, err := loader2.Load()
-	require.NoError(t, err)
-	assert.Equal(t, "0.0.0.0:9090", cfg2.Server.Addr)
+			cfg, err := loader.Load()
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedAddr, cfg.Server.Addr)
+			assert.Equal(t, tt.expectedTimeout, cfg.Server.Timeout)
+		})
+	}
 }
 
-func TestExpandEnv(t *testing.T) {
+// Test_expandEnv 测试环境变量展开功能
+// 覆盖各种场景：简单变量、默认值、多个变量、边界情况等
+func Test_expandEnv(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
@@ -164,15 +242,60 @@ func TestExpandEnv(t *testing.T) {
 			envVars:  map[string]string{},
 			expected: "Value: ",
 		},
+		{
+			name:     "multiple consecutive variables",
+			input:    "${A}${B}${C}",
+			envVars:  map[string]string{"A": "1", "B": "2", "C": "3"},
+			expected: "123",
+		},
+		{
+			name:     "variable with special characters in value",
+			input:    "Path: ${PATH}",
+			envVars:  map[string]string{"PATH": "/usr/bin:/usr/local/bin"},
+			expected: "Path: /usr/bin:/usr/local/bin",
+		},
+		{
+			name:     "variable name with underscore",
+			input:    "${MY_VAR:default}",
+			envVars:  map[string]string{"MY_VAR": "value"},
+			expected: "value",
+		},
+		{
+			name:     "variable with colon in default",
+			input:    "${HOST:localhost:8080}",
+			envVars:  map[string]string{},
+			expected: "localhost:8080",
+		},
+		{
+			name:     "unclosed brace",
+			input:    "${VAR",
+			envVars:  map[string]string{},
+			expected: "${VAR",
+		},
+		{
+			name:     "variable not set without default",
+			input:    "Value: ${NOT_SET}",
+			envVars:  map[string]string{},
+			expected: "Value: ",
+		},
+		{
+			name:     "nested braces in text",
+			input:    "Text ${VAR} more text",
+			envVars:  map[string]string{"VAR": "value"},
+			expected: "Text value more text",
+		},
+		{
+			name:     "variable with empty value uses default",
+			input:    "${VAR:default}",
+			envVars:  map[string]string{"VAR": ""},
+			expected: "default",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set environment variables
-			for k, v := range tt.envVars {
-				os.Setenv(k, v)
-				defer os.Unsetenv(k)
-			}
+			cleanup := setupEnvVars(t, tt.envVars)
+			defer cleanup()
 
 			result := expandEnv(tt.input)
 			assert.Equal(t, tt.expected, result)
@@ -180,79 +303,156 @@ func TestExpandEnv(t *testing.T) {
 	}
 }
 
+// TestLoader_Load_DuplicateConfig 测试重复配置的处理
+// 验证重复配置能被正确检测并返回错误
 func TestLoader_Load_DuplicateConfig(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
-
-	// This is tricky - TOML parser itself handles duplicates, but we can test
-	// by creating a config that would have issues
-	configContent := `
+	t.Run("重复的顶级配置段", func(t *testing.T) {
+		// TOML 解析器会在解析阶段检测重复的键并报错
+		configContent := `
 [server]
 addr = "localhost:8080"
 
 [server]
 addr = "localhost:9090"
+
+[services.prometheus]
+type = "prometheus"
+enabled = true
 `
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
-	require.NoError(t, err)
+		configPath := createTempConfig(t, configContent)
 
-	loader, err := NewLoader(configPath)
-	require.NoError(t, err)
+		loader, err := NewLoader(configPath)
+		require.NoError(t, err)
 
-	// The TOML library will handle this, but our checkDuplicateConfig should catch it
-	_, err = loader.Load()
-	// The behavior depends on TOML library - it might overwrite or error
-	// This test verifies the loader doesn't crash
-	assert.NotNil(t, loader)
+		_, err = loader.Load()
+		// TOML 库会在解析阶段检测到重复配置并报错
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "parse config file")
+		assert.Contains(t, err.Error(), "already been defined")
+		assert.NotNil(t, loader)
+	})
+
+	t.Run("无重复的有效配置", func(t *testing.T) {
+		configContent := `
+[server]
+addr = "localhost:8080"
+timeout = "30s"
+
+[data.database]
+driver = "mysql"
+
+[data.redis]
+addr = "localhost:6379"
+
+[services.prometheus]
+type = "prometheus"
+enabled = true
+`
+		configPath := createTempConfig(t, configContent)
+
+		loader, err := NewLoader(configPath)
+		require.NoError(t, err)
+
+		_, err = loader.Load()
+		require.NoError(t, err)
+		assert.NotNil(t, loader)
+	})
 }
 
-func TestLoader_GetCollectorOptions(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
-
-	configContent := `
+// TestLoader_GetServiceOptions 测试获取服务选项
+// 覆盖正常获取、不存在 service、service 没有 options 等场景
+func TestLoader_GetServiceOptions(t *testing.T) {
+	t.Run("正常获取 service options", func(t *testing.T) {
+		configContent := `
 [server]
 addr = "localhost:8080"
 
-[collectors.prometheus]
+[services.prometheus]
 type = "prometheus"
 enabled = true
 
-[collectors.prometheus.options]
+[services.prometheus.options]
 address = "http://localhost:9090"
 timeout = "30s"
+
+[services.pagerduty]
+type = "pagerduty"
+enabled = false
+
+[services.pagerduty.options]
+api_key = "test-key"
 `
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
-	require.NoError(t, err)
+		configPath := createTempConfig(t, configContent)
 
-	loader, err := NewLoader(configPath)
-	require.NoError(t, err)
+		loader, err := NewLoader(configPath)
+		require.NoError(t, err)
 
-	_, err = loader.Load()
-	require.NoError(t, err)
+		_, err = loader.Load()
+		require.NoError(t, err)
 
-	// Get collector options
-	primitive, meta, err := loader.GetCollectorOptions("prometheus")
-	require.NoError(t, err)
-	assert.NotNil(t, meta)
-	assert.NotNil(t, primitive)
+		// Get prometheus service options
+		primitive, meta, err := loader.GetServiceOptions("prometheus")
+		require.NoError(t, err)
+		assert.NotNil(t, meta)
+		assert.NotNil(t, primitive)
 
-	// Test getting non-existent collector
-	_, _, err = loader.GetCollectorOptions("nonexistent")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not found")
+		// Get pagerduty service options
+		primitive2, meta2, err := loader.GetServiceOptions("pagerduty")
+		require.NoError(t, err)
+		assert.NotNil(t, meta2)
+		assert.NotNil(t, primitive2)
+	})
+
+	t.Run("不存在的 service", func(t *testing.T) {
+		configContent := `
+[server]
+addr = "localhost:8080"
+
+[services.prometheus]
+type = "prometheus"
+enabled = true
+`
+		configPath := createTempConfig(t, configContent)
+
+		loader, err := NewLoader(configPath)
+		require.NoError(t, err)
+
+		_, err = loader.Load()
+		require.NoError(t, err)
+
+		_, _, err = loader.GetServiceOptions("nonexistent")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("service 没有 options", func(t *testing.T) {
+		configContent := `
+[server]
+addr = "localhost:8080"
+
+[services.prometheus]
+type = "prometheus"
+enabled = true
+`
+		configPath := createTempConfig(t, configContent)
+
+		loader, err := NewLoader(configPath)
+		require.NoError(t, err)
+
+		_, err = loader.Load()
+		require.NoError(t, err)
+
+		// Service 存在但没有 options，应该能正常返回（primitive 可能为空）
+		primitive, meta, err := loader.GetServiceOptions("prometheus")
+		require.NoError(t, err)
+		assert.NotNil(t, meta)
+		// primitive 可能为空，这是正常的
+		_ = primitive
+	})
 }
 
-func TestLoader_GetCollectorOptions_NotLoaded(t *testing.T) {
-	loader, err := NewLoader("./test.toml")
-	require.NoError(t, err)
-
-	// Try to get options before loading
-	_, _, err = loader.GetCollectorOptions("prometheus")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "config not loaded")
-}
-
+// TestLoader_Get 测试获取当前配置
+// 验证加载前返回 nil，加载后返回正确的配置
 func TestLoader_Get(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
@@ -260,6 +460,10 @@ func TestLoader_Get(t *testing.T) {
 	configContent := `
 [server]
 addr = "localhost:8080"
+
+[services.prometheus]
+type = "prometheus"
+enabled = true
 `
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	require.NoError(t, err)
@@ -279,41 +483,130 @@ addr = "localhost:8080"
 	assert.Equal(t, "localhost:8080", cfg.Server.Addr)
 }
 
-func TestLoader_Validate_InvalidConfig(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
-
-	// Missing required server.addr
-	configContent := `
+// TestLoader_Load_ValidationError 测试配置验证失败的情况
+// 覆盖 required、hostname_port、oneof 等验证规则
+func TestLoader_Load_ValidationError(t *testing.T) {
+	t.Run("缺少必需的 server.addr", func(t *testing.T) {
+		configContent := `
 [server]
 timeout = "30s"
+
+[services.prometheus]
+type = "prometheus"
+enabled = true
 `
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
-	require.NoError(t, err)
+		configPath := createTempConfig(t, configContent)
 
-	loader, err := NewLoader(configPath)
-	require.NoError(t, err)
+		loader, err := NewLoader(configPath)
+		require.NoError(t, err)
 
-	_, err = loader.Load()
-	// Validation might pass or fail depending on validator rules
-	// This test ensures the loader handles validation
-	assert.NotNil(t, loader)
-}
+		_, err = loader.Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "validate config")
+		// 验证错误应该包含 Addr 字段的信息
+		assert.True(t, strings.Contains(err.Error(), "Addr") || strings.Contains(err.Error(), "addr"),
+			"错误消息应该包含 Addr 或 addr: %s", err.Error())
+	})
 
-func TestCheckDuplicateConfig(t *testing.T) {
-	// TOML library itself detects duplicate keys during decode
-	// So we test with a valid config to ensure checkDuplicateConfig works
-	content := `
+	t.Run("无效的 hostname_port 格式", func(t *testing.T) {
+		configContent := `
+[server]
+addr = "invalid-address"
+timeout = "30s"
+
+[services.prometheus]
+type = "prometheus"
+enabled = true
+`
+		configPath := createTempConfig(t, configContent)
+
+		loader, err := NewLoader(configPath)
+		require.NoError(t, err)
+
+		_, err = loader.Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "validate config")
+	})
+
+	t.Run("有效的 hostname_port 格式", func(t *testing.T) {
+		configContent := `
 [server]
 addr = "localhost:8080"
 timeout = "30s"
-`
-	var cfg Config
-	meta, err := toml.Decode(content, &cfg)
-	require.NoError(t, err)
 
-	// The checkDuplicateConfig function should pass for valid config
-	err = checkDuplicateConfig(meta)
-	assert.NoError(t, err)
-	assert.NotNil(t, meta)
+[services.prometheus]
+type = "prometheus"
+enabled = true
+`
+		configPath := createTempConfig(t, configContent)
+
+		loader, err := NewLoader(configPath)
+		require.NoError(t, err)
+
+		_, err = loader.Load()
+		require.NoError(t, err)
+	})
+
+	t.Run("service type 不在允许的列表中", func(t *testing.T) {
+		configContent := `
+[server]
+addr = "localhost:8080"
+
+[services.invalid]
+type = "invalid_type"
+enabled = true
+`
+		configPath := createTempConfig(t, configContent)
+
+		loader, err := NewLoader(configPath)
+		require.NoError(t, err)
+
+		_, err = loader.Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "validate config")
+	})
+
+	t.Run("service 缺少 type", func(t *testing.T) {
+		configContent := `
+[server]
+addr = "localhost:8080"
+
+[services.prometheus]
+enabled = true
+`
+		configPath := createTempConfig(t, configContent)
+
+		loader, err := NewLoader(configPath)
+		require.NoError(t, err)
+
+		_, err = loader.Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "validate config")
+	})
+
+	t.Run("有效的 service type", func(t *testing.T) {
+		configContent := `
+[server]
+addr = "localhost:8080"
+
+[services.prometheus]
+type = "prometheus"
+enabled = true
+
+[services.pagerduty]
+type = "pagerduty"
+enabled = false
+
+[services.opensearch]
+type = "opensearch"
+enabled = true
+`
+		configPath := createTempConfig(t, configContent)
+
+		loader, err := NewLoader(configPath)
+		require.NoError(t, err)
+
+		_, err = loader.Load()
+		require.NoError(t, err)
+	})
 }
