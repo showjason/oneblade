@@ -21,8 +21,9 @@ func main() {
 	configPath := flag.String("config", "./config.toml", "配置文件路径")
 	flag.Parse()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// 使用 signal.NotifyContext 创建可被信号取消的 context
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	// 加载配置
 	loader, err := config.NewLoader(*configPath)
@@ -66,16 +67,16 @@ func main() {
 
 	output, err := runner.Run(ctx, input)
 	if err != nil {
-		log.Fatalf("failed to run inspection: %v", err)
+		// 检查是否是被中断
+		if ctx.Err() != nil {
+			log.Printf("[main] inspection interrupted: %v", ctx.Err())
+		} else {
+			log.Fatalf("failed to run inspection: %v", err)
+		}
+	} else {
+		log.Println("巡检报告:")
+		log.Println(output.Text())
 	}
-
-	log.Println("巡检报告:")
-	log.Println(output.Text())
-
-	// 等待退出信号
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
 
 	log.Println("[main] shutting down...")
 }

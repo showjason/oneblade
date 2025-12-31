@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/PagerDuty/go-pagerduty"
@@ -133,8 +134,13 @@ func (c *PagerDutyCollector) AsTool() (tools.Tool, error) {
 }
 
 func (c *PagerDutyCollector) Health(ctx context.Context) error {
-	_, err := c.client.ListAbilitiesWithContext(ctx)
-	return err
+	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	_, err := c.client.ListAbilitiesWithContext(healthCtx)
+	if err != nil {
+		return fmt.Errorf("pagerduty health check failed: %w", err)
+	}
+	return nil
 }
 
 func (c *PagerDutyCollector) Close() error {

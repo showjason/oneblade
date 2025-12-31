@@ -99,7 +99,13 @@ func (c *PrometheusCollector) Handle(ctx context.Context, input PrometheusQueryI
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	// 使用配置的超时时间，如果未配置则使用默认值 30 秒
+	timeout := c.timeout
+	if timeout == 0 {
+		timeout = 60 * time.Second
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	result, warnings, err := c.api.QueryRange(ctx, input.PromQL, v1.Range{
@@ -126,8 +132,13 @@ func (c *PrometheusCollector) AsTool() (tools.Tool, error) {
 }
 
 func (c *PrometheusCollector) Health(ctx context.Context) error {
-	_, err := c.api.Config(ctx)
-	return err
+	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	_, err := c.api.Config(healthCtx)
+	if err != nil {
+		return fmt.Errorf("prometheus health check failed: %w", err)
+	}
+	return nil
 }
 
 func (c *PrometheusCollector) Close() error {

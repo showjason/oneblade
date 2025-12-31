@@ -125,11 +125,16 @@ func (c *OpenSearchCollector) AsTool() (tools.Tool, error) {
 }
 
 func (c *OpenSearchCollector) Health(ctx context.Context) error {
-	res, err := c.client.Ping()
+	req := opensearchapi.PingRequest{}
+	res, err := req.Do(ctx, c.client)
 	if err != nil {
 		return err
 	}
 	defer res.Body.Close()
+
+	if res.IsError() {
+		return fmt.Errorf("opensearch health check failed: %s", res.Status())
+	}
 	return nil
 }
 
