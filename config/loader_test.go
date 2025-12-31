@@ -301,19 +301,132 @@ timeout = "30s"
 }
 
 func TestCheckDuplicateConfig(t *testing.T) {
-	// TOML library itself detects duplicate keys during decode
-	// So we test with a valid config to ensure checkDuplicateConfig works
-	content := `
+	tests := []struct {
+		name        string
+		content     string
+		expectError bool
+		errorMsg    string
+		description string
+	}{
+		{
+			name: "valid_config_no_duplicates",
+			content: `
 [server]
 addr = "localhost:8080"
 timeout = "30s"
-`
-	var cfg Config
-	meta, err := toml.Decode(content, &cfg)
-	require.NoError(t, err)
+`,
+			expectError: false,
+			description: "正常配置，无重复键",
+		},
+		{
+			name: "valid_config_with_nested_sections",
+			content: `
+[server]
+addr = "localhost:8080"
 
-	// The checkDuplicateConfig function should pass for valid config
-	err = checkDuplicateConfig(meta)
-	assert.NoError(t, err)
-	assert.NotNil(t, meta)
+[data.database]
+driver = "mysql"
+
+[data.redis]
+addr = "localhost:6379"
+
+[collectors.prometheus]
+type = "prometheus"
+enabled = true
+`,
+			expectError: false,
+			description: "包含嵌套配置段的正常配置",
+		},
+		{
+			name: "valid_config_deeply_nested",
+			content: `
+[collectors.prometheus]
+type = "prometheus"
+
+[collectors.prometheus.options]
+address = "http://localhost:9090"
+timeout = "30s"
+`,
+			expectError: false,
+			description: "深层嵌套配置（collectors.prometheus.options）",
+		},
+		{
+			name:        "empty_config",
+			content:     ``,
+			expectError: false,
+			description: "空配置",
+		},
+		{
+			name: "config_with_only_top_level",
+			content: `
+[server]
+addr = "localhost:8080"
+`,
+			expectError: false,
+			description: "只有顶层配置段",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var cfg Config
+			meta, err := toml.Decode(tt.content, &cfg)
+			require.NoError(t, err, "TOML 解析应该成功: %s", tt.description)
+
+			err = checkDuplicateConfig(meta)
+
+			if tt.expectError {
+				require.Error(t, err, "应该检测到重复配置: %s", tt.description)
+				if tt.errorMsg != "" {
+					assert.Contains(t, err.Error(), tt.errorMsg, "错误消息应该包含预期内容")
+				}
+			} else {
+				assert.NoError(t, err, "不应该有错误: %s", tt.description)
+			}
+		})
+	}
+}
+
+// TestCheckDuplicateConfig_EdgeCases 测试边界情况
+func TestCheckDuplicateConfig_EdgeCases(t *testing.T) {
+	t.Run("single_key_config", func(t *testing.T) {
+		// 测试只有一个顶层配置段的简单配置
+		content := `
+[server]
+addr = "localhost:8080"
+`
+		var cfg Config
+		meta, err := toml.Decode(content, &cfg)
+		require.NoError(t, err)
+
+		err = checkDuplicateConfig(meta)
+		assert.NoError(t, err, "单个配置段的配置应该通过")
+	})
+
+	t.Run("top_level_key_without_table", func(t *testing.T) {
+		// 测试没有表头的顶层键（虽然在这个项目中不常见，但验证函数能处理）
+		// 注意：这不是空键，空键是指 []string{}（长度为 0 的切片）
+		// 这里测试的是键路径为 ["addr"] 的情况，而不是 ["server", "addr"]
+		content := `addr = "localhost:8080"`
+		var cfg struct {
+			Addr string `toml:"addr"`
+		}
+		meta, err := toml.Decode(content, &cfg)
+		require.NoError(t, err)
+
+		err = checkDuplicateConfig(meta)
+		assert.NoError(t, err, "没有表头的顶层键应该能正常处理")
+	})
+
+	t.Run("empty_config_produces_no_keys", func(t *testing.T) {
+		// 测试空配置（不产生任何键）
+		content := ``
+		var cfg Config
+		meta, err := toml.Decode(content, &cfg)
+		require.NoError(t, err)
+
+		// 空配置应该不产生任何键，函数应该能正常处理
+		err = checkDuplicateConfig(meta)
+		assert.NoError(t, err, "空配置应该能正常处理")
+	})
 }
