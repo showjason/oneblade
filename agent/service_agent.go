@@ -7,14 +7,14 @@ import (
 	"github.com/oneblade/service"
 )
 
-// ServiceAgentConfig Service Agent 配置
-type ServiceAgentConfig struct {
+// ServiceAgent Service Agent 配置
+type ServiceAgent struct {
 	Model    blades.ModelProvider
 	Services []service.Service
 }
 
 // NewServiceAgent 创建统一服务 Tool Agent
-func NewServiceAgent(cfg ServiceAgentConfig) (blades.Agent, error) {
+func NewServiceAgent(cfg ServiceAgent) (blades.Agent, error) {
 	// 创建各个 Service Tool
 	var serviceTools []tools.Tool
 	for _, s := range cfg.Services {

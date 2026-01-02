@@ -18,7 +18,7 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 	services := cfg.Services
 
 	// 创建统一 Service Agent
-	serviceAgent, err := NewServiceAgent(ServiceAgentConfig{
+	serviceAgent, err := NewServiceAgent(ServiceAgent{
 		Model:    cfg.Model,
 		Services: services,
 	})
