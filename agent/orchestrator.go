@@ -4,24 +4,23 @@ import (
 	"github.com/go-kratos/blades"
 	"github.com/go-kratos/blades/flow"
 
-	"github.com/oneblade/collector"
+	"github.com/oneblade/service"
 )
 
 // Orchestrator 编排 Agent 配置
 type OrchestratorConfig struct {
-	Model      blades.ModelProvider
-	Collectors []collector.Collector
+	Model    blades.ModelProvider
+	Services []service.Service
 }
 
 // NewOrchestratorAgent 创建主编排 Agent
 func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
-	// 从 Registry 获取所有 Collectors
-	collectors := cfg.Collectors
+	services := cfg.Services
 
-	// 创建统一数据采集 Agent
-	dataCollectionAgent, err := NewDataCollectionAgent(DataCollectionAgentConfig{
-		Model:      cfg.Model,
-		Collectors: collectors,
+	// 创建统一 Service Agent
+	serviceAgent, err := NewServiceAgent(ServiceAgent{
+		Model:    cfg.Model,
+		Services: services,
 	})
 	if err != nil {
 		return nil, err
@@ -41,12 +40,13 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 		return nil, err
 	}
 
-	// 创建顺序分析流程: 数据采集 -> 预测分析 -> 报告生成
+	// 创建顺序分析流程: 数据采集/服务操作 -> 预测分析 -> 报告生成
+	// 注意: 这里的 serviceAgent 替代了原先的 dataCollectionAgent
 	analysisAgent := flow.NewSequentialAgent(flow.SequentialConfig{
 		Name:        "analysis_agent",
 		Description: "顺序执行数据采集、预测分析和报告生成",
 		SubAgents: []blades.Agent{
-			dataCollectionAgent,
+			serviceAgent,
 			predictionAgent,
 			reportAgent,
 		},
@@ -59,7 +59,7 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 		Model:       cfg.Model,
 		SubAgents: []blades.Agent{
 			analysisAgent,
-			dataCollectionAgent,
+			serviceAgent, // 直接暴露 ServiceAgent 以便进行独立操作（如解决告警）
 			reportAgent,
 			predictionAgent,
 		},

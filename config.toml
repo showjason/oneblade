@@ -14,24 +14,24 @@ addr = "${REDIS_ADDR:localhost:6379}"
 read_timeout = "3s"
 write_timeout = "3s"
 
-# Collector 配置 - 使用 map 结构，支持动态扩展
-[collectors.prometheus]
+# Service 配置 - 使用 map 结构，支持动态扩展
+[services.prometheus]
 type = "prometheus"
 enabled = true
-[collectors.prometheus.options]
+[services.prometheus.options]
 address = "${PROMETHEUS_URL:http://localhost:9090}"
 timeout = "30s"
 
-[collectors.pagerduty]
+[services.pagerduty]
 type = "pagerduty"
 enabled = true
-[collectors.pagerduty.options]
+[services.pagerduty.options]
 api_key = "${PAGERDUTY_API_KEY}"
 
-[collectors.opensearch]
+[services.opensearch]
 type = "opensearch"
 enabled = true
-[collectors.opensearch.options]
+[services.opensearch.options]
 addresses = ["${OPENSEARCH_URL:http://localhost:9200}"]
 username = "${OPENSEARCH_USER}"
 password = "${OPENSEARCH_PASS}"
