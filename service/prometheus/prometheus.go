@@ -17,12 +17,12 @@ func init() {
 		return service.ParseOptions[Options](meta, primitive, service.Prometheus)
 	})
 
-	service.RegisterService(service.Prometheus, func(opts interface{}) (service.Service, error) {
+	service.RegisterService(service.Prometheus, func(meta service.ServiceMeta, opts interface{}) (service.Service, error) {
 		promOpts, ok := opts.(*Options)
 		if !ok {
 			return nil, fmt.Errorf("invalid prometheus options type, got %T", opts)
 		}
-		return NewService(promOpts)
+		return NewService(meta, promOpts)
 	})
 }
 
@@ -32,32 +32,40 @@ type Options struct {
 }
 
 type Service struct {
-	address string
-	timeout time.Duration
-	client  api.Client
-	api     v1.API
+	name        string
+	description string
+	address     string
+	timeout     time.Duration
+	client      api.Client
+	api         v1.API
 }
 
-func NewService(opts *Options) (*Service, error) {
+func NewService(meta service.ServiceMeta, opts *Options) (*Service, error) {
 	client, err := api.NewClient(api.Config{Address: opts.Address})
 	if err != nil {
 		return nil, fmt.Errorf("create prometheus client: %w", err)
 	}
 
 	return &Service{
-		address: opts.Address,
-		timeout: opts.Timeout,
-		client:  client,
-		api:     v1.NewAPI(client),
+		name:        meta.Name,
+		description: meta.Description,
+		address:     opts.Address,
+		timeout:     opts.Timeout,
+		client:      client,
+		api:         v1.NewAPI(client),
 	}, nil
 }
 
-func (s *Service) Name() service.ServiceType {
-	return service.Prometheus
+func (s *Service) Name() string {
+	return s.name
 }
 
 func (s *Service) Description() string {
-	return "Query metrics from Prometheus. Support query_range (metrics over time) and query_instant (metrics at single point)."
+	return s.description
+}
+
+func (s *Service) Type() service.ServiceType {
+	return service.Prometheus
 }
 
 // === Request/Response Structures ===

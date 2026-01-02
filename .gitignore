@@ -36,6 +36,7 @@ configs/config.prod.toml
 implementation_plan.md
 
 doc/
+.cursor/
 
 
 

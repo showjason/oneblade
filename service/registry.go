@@ -8,7 +8,12 @@ import (
 	"github.com/oneblade/config"
 )
 
-type ServiceFactory func(opts interface{}) (Service, error)
+type ServiceMeta struct {
+	Name        string
+	Description string
+}
+
+type ServiceFactory func(meta ServiceMeta, opts interface{}) (Service, error)
 
 var serviceRegistry = struct {
 	mu       sync.RWMutex
@@ -39,12 +44,12 @@ func getServiceFactory(serviceType ServiceType) (ServiceFactory, bool) {
 
 type Registry struct {
 	mu       sync.RWMutex
-	services map[ServiceType]Service
+	services map[string]Service
 }
 
 func NewRegistry() *Registry {
 	return &Registry{
-		services: make(map[ServiceType]Service),
+		services: make(map[string]Service),
 	}
 }
 
@@ -83,7 +88,11 @@ func (r *Registry) InitFromConfig(loader *config.Loader) error {
 		}
 
 		// 创建 service
-		service, err := r.createService(serviceType, opts)
+		serviceMeta := ServiceMeta{
+			Name:        name,
+			Description: serviceCfg.Description,
+		}
+		service, err := r.createService(serviceType, serviceMeta, opts)
 		if err != nil {
 			return fmt.Errorf("create service %s: %w", name, err)
 		}
@@ -95,13 +104,13 @@ func (r *Registry) InitFromConfig(loader *config.Loader) error {
 	return nil
 }
 
-func (r *Registry) createService(serviceType ServiceType, opts interface{}) (Service, error) {
+func (r *Registry) createService(serviceType ServiceType, meta ServiceMeta, opts interface{}) (Service, error) {
 	factory, ok := getServiceFactory(serviceType)
 	if !ok {
 		return nil, fmt.Errorf("unknown service type: %s (no factory registered)", serviceType)
 	}
 
-	service, err := factory(opts)
+	service, err := factory(meta, opts)
 	if err != nil {
 		return nil, fmt.Errorf("create service %s: %w", serviceType, err)
 	}

@@ -15,7 +15,8 @@ const (
 )
 
 type Service interface {
-	Name() ServiceType
+	Name() string
+	Type() ServiceType
 	Description() string
 	AsTool() (tools.Tool, error)
 	Health(ctx context.Context) error

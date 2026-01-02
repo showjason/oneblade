@@ -16,12 +16,12 @@ func init() {
 		return service.ParseOptions[Options](meta, primitive, service.PagerDuty)
 	})
 
-	service.RegisterService(service.PagerDuty, func(opts interface{}) (service.Service, error) {
+	service.RegisterService(service.PagerDuty, func(meta service.ServiceMeta, opts interface{}) (service.Service, error) {
 		pdOpts, ok := opts.(*Options)
 		if !ok {
 			return nil, fmt.Errorf("invalid pagerduty options type, got %T", opts)
 		}
-		return NewService(pdOpts), nil
+		return NewService(meta, pdOpts), nil
 	})
 }
 
@@ -30,23 +30,31 @@ type Options struct {
 }
 
 type Service struct {
-	apiKey string
-	client *pagerduty.Client
+	name        string
+	description string
+	apiKey      string
+	client      *pagerduty.Client
 }
 
-func NewService(opts *Options) *Service {
+func NewService(meta service.ServiceMeta, opts *Options) *Service {
 	return &Service{
-		apiKey: opts.APIKey,
-		client: pagerduty.NewClient(opts.APIKey),
+		name:        meta.Name,
+		description: meta.Description,
+		apiKey:      opts.APIKey,
+		client:      pagerduty.NewClient(opts.APIKey),
 	}
 }
 
-func (s *Service) Name() service.ServiceType {
-	return service.PagerDuty
+func (s *Service) Name() string {
+	return s.name
 }
 
 func (s *Service) Description() string {
-	return "Manage PagerDuty incidents and alerts. Capabilities: list, acknowledge, resolve, snooze, and get details."
+	return s.description
+}
+
+func (s *Service) Type() service.ServiceType {
+	return service.PagerDuty
 }
 
 // === Request/Response Structures ===

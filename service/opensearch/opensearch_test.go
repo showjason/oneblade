@@ -3,6 +3,8 @@ package opensearch
 import (
 	"context"
 	"testing"
+
+	"github.com/oneblade/service"
 )
 
 func TestService_Name(t *testing.T) {
@@ -10,7 +12,8 @@ func TestService_Name(t *testing.T) {
 		Addresses: []string{"http://localhost:9200"},
 		Index:     "test-index",
 	}
-	svc, err := NewService(opts)
+	meta := service.ServiceMeta{Name: "opensearch"}
+	svc, err := NewService(meta, opts)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -25,7 +28,8 @@ func TestService_AsTool(t *testing.T) {
 		Addresses: []string{"http://localhost:9200"},
 		Index:     "test-index",
 	}
-	svc, err := NewService(opts)
+	meta := service.ServiceMeta{Name: "opensearch"}
+	svc, err := NewService(meta, opts)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -44,7 +48,8 @@ func TestService_Handle_InvalidOp(t *testing.T) {
 		Addresses: []string{"http://localhost:9200"},
 		Index:     "test-index",
 	}
-	svc, err := NewService(opts)
+	meta := service.ServiceMeta{Name: "opensearch"}
+	svc, err := NewService(meta, opts)
 	if err != nil {
 		t.Fatal(err)
 	}

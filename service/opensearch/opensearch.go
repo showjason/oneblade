@@ -19,12 +19,12 @@ func init() {
 		return service.ParseOptions[Options](meta, primitive, service.OpenSearch)
 	})
 
-	service.RegisterService(service.OpenSearch, func(opts interface{}) (service.Service, error) {
+	service.RegisterService(service.OpenSearch, func(meta service.ServiceMeta, opts interface{}) (service.Service, error) {
 		osOpts, ok := opts.(*Options)
 		if !ok {
 			return nil, fmt.Errorf("invalid opensearch options type, got %T", opts)
 		}
-		return NewService(osOpts)
+		return NewService(meta, osOpts)
 	})
 }
 
@@ -36,14 +36,16 @@ type Options struct {
 }
 
 type Service struct {
-	addresses []string
-	username  string
-	password  string
-	index     string
-	client    *opensearch.Client
+	name        string
+	description string
+	addresses   []string
+	username    string
+	password    string
+	index       string
+	client      *opensearch.Client
 }
 
-func NewService(opts *Options) (*Service, error) {
+func NewService(meta service.ServiceMeta, opts *Options) (*Service, error) {
 	client, err := opensearch.NewClient(opensearch.Config{
 		Addresses: opts.Addresses,
 		Username:  opts.Username,
@@ -54,20 +56,26 @@ func NewService(opts *Options) (*Service, error) {
 	}
 
 	return &Service{
-		addresses: opts.Addresses,
-		username:  opts.Username,
-		password:  opts.Password,
-		index:     opts.Index,
-		client:    client,
+		name:        meta.Name,
+		description: meta.Description,
+		addresses:   opts.Addresses,
+		username:    opts.Username,
+		password:    opts.Password,
+		index:       opts.Index,
+		client:      client,
 	}, nil
 }
 
-func (s *Service) Name() service.ServiceType {
-	return service.OpenSearch
+func (s *Service) Name() string {
+	return s.name
 }
 
 func (s *Service) Description() string {
-	return "Execute DSL queries against OpenSearch. Operation 'search' allows full JSON body queries."
+	return s.description
+}
+
+func (s *Service) Type() service.ServiceType {
+	return service.OpenSearch
 }
 
 // === Request/Response Structures ===
