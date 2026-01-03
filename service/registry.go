@@ -72,10 +72,6 @@ func (r *Registry) InitFromConfig(loader *config.Loader) error {
 			continue
 		}
 
-		// 捕获循环变量
-		name := name
-		serviceCfg := serviceCfg
-
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
