@@ -108,8 +108,11 @@ func (l *Loader) validate(cfg *Config) error {
 }
 
 // Get 获取当前配置
-func (l *Loader) Get() *Config {
-	return l.config
+func (l *Loader) Get() (*Config, error) {
+	if l.config == nil {
+		return nil, fmt.Errorf("config not loaded")
+	}
+	return l.config, nil
 }
 
 // ConfigPath 获取配置文件路径

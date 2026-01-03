@@ -471,14 +471,16 @@ enabled = true
 	loader, err := NewLoader(configPath)
 	require.NoError(t, err)
 
-	// Before loading, Get should return nil
-	assert.Nil(t, loader.Get())
+	// Before loading, Get should return error
+	_, err = loader.Get()
+	assert.Error(t, err)
 
 	// After loading
 	_, err = loader.Load()
 	require.NoError(t, err)
 
-	cfg := loader.Get()
+	cfg, err := loader.Get()
+	require.NoError(t, err)
 	assert.NotNil(t, cfg)
 	assert.Equal(t, "localhost:8080", cfg.Server.Addr)
 }

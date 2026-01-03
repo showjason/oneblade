@@ -54,13 +54,17 @@ func NewRegistry() *Registry {
 }
 
 func (r *Registry) InitFromConfig(loader *config.Loader) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	cfg := loader.Get()
-	if cfg == nil {
-		return fmt.Errorf("config not loaded")
+	cfg, err := loader.Get()
+	if err != nil {
+		return fmt.Errorf("failed to get config: %w", err)
 	}
+
+	// 使用临时 map 和锁来收集初始化成功的服务，支持并发初始化
+	var (
+		mu          sync.Mutex
+		newServices = make(map[string]Service)
+		wg          sync.WaitGroup
+	)
 
 	for name, serviceCfg := range cfg.Services {
 		if !serviceCfg.Enabled {
@@ -68,37 +72,62 @@ func (r *Registry) InitFromConfig(loader *config.Loader) error {
 			continue
 		}
 
-		// 获取原始配置数据
-		primitive, meta, err := loader.GetServiceOptions(name)
-		if err != nil {
-			return fmt.Errorf("get options for %s: %w", name, err)
-		}
+		// 捕获循环变量
+		name := name
+		serviceCfg := serviceCfg
 
-		// 获取解析器
-		serviceType := ServiceType(serviceCfg.Type)
-		parser, ok := GetOptionsParser(serviceType)
-		if !ok {
-			return fmt.Errorf("no parser registered for service type: %s", serviceType)
-		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 
-		// 统一调用解析器
-		opts, err := parser(meta, primitive)
-		if err != nil {
-			return fmt.Errorf("parse options for %s: %w", name, err)
-		}
+			// 获取原始配置数据
+			primitive, meta, err := loader.GetServiceOptions(name)
+			if err != nil {
+				log.Printf("[service] failed to get options for %s: %v", name, err)
+				return
+			}
 
-		// 创建 service
-		serviceMeta := ServiceMeta{
-			Name:        name,
-			Description: serviceCfg.Description,
-		}
-		service, err := r.createService(serviceType, serviceMeta, opts)
-		if err != nil {
-			return fmt.Errorf("create service %s: %w", name, err)
-		}
+			// 获取解析器
+			serviceType := ServiceType(serviceCfg.Type)
+			parser, ok := GetOptionsParser(serviceType)
+			if !ok {
+				log.Printf("[service] no parser registered for service type: %s (service: %s)", serviceType, name)
+				return
+			}
 
-		r.services[service.Name()] = service
-		log.Printf("[service] initialized %s", name)
+			// 统一调用解析器
+			opts, err := parser(meta, primitive)
+			if err != nil {
+				log.Printf("[service] failed to parse options for %s: %v", name, err)
+				return
+			}
+
+			// 创建 service
+			serviceMeta := ServiceMeta{
+				Name:        name,
+				Description: serviceCfg.Description,
+			}
+			service, err := r.createService(serviceType, serviceMeta, opts)
+			if err != nil {
+				log.Printf("[service] failed to create service %s: %v", name, err)
+				return
+			}
+
+			mu.Lock()
+			newServices[name] = service
+			mu.Unlock()
+
+			log.Printf("[service] initialized %s", name)
+		}()
+	}
+
+	wg.Wait()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for name, s := range newServices {
+		r.services[name] = s
 	}
 
 	return nil
