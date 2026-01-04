@@ -48,6 +48,14 @@ func containsAny(s string, substrings []string) bool {
 	return false
 }
 
+// testLLMConfig 测试用的最小 LLM 配置
+const testLLMConfig = `
+[llm]
+provider = "openai"
+model = "gpt-4"
+api_key = "test-api-key"
+`
+
 // TestNewLoader 测试创建配置加载器
 // 验证加载器能正确创建并保存配置文件路径
 func TestNewLoader(t *testing.T) {
@@ -60,7 +68,7 @@ func TestNewLoader(t *testing.T) {
 // TestLoader_Load_ValidConfig 测试加载有效配置
 // 验证配置能正确解析并包含所有预期的字段和值
 func TestLoader_Load_ValidConfig(t *testing.T) {
-	configContent := `
+	configContent := testLLMConfig + `
 [server]
 addr = "localhost:8080"
 timeout = "30s"
@@ -135,7 +143,7 @@ func TestLoader_Load_WithEnvVars(t *testing.T) {
 	}{
 		{
 			name: "使用默认值",
-			configContent: `
+			configContent: testLLMConfig + `
 [server]
 addr = "${SERVER_ADDR:localhost:8080}"
 timeout = "${TIMEOUT:30s}"
@@ -150,7 +158,7 @@ enabled = true
 		},
 		{
 			name: "环境变量覆盖默认值",
-			configContent: `
+			configContent: testLLMConfig + `
 [server]
 addr = "${SERVER_ADDR:localhost:8080}"
 timeout = "${TIMEOUT:30s}"
@@ -165,7 +173,7 @@ enabled = true
 		},
 		{
 			name: "部分环境变量设置",
-			configContent: `
+			configContent: testLLMConfig + `
 [server]
 addr = "${SERVER_ADDR:localhost:8080}"
 timeout = "${TIMEOUT:30s}"
@@ -333,7 +341,7 @@ enabled = true
 	})
 
 	t.Run("无重复的有效配置", func(t *testing.T) {
-		configContent := `
+		configContent := testLLMConfig + `
 [server]
 addr = "localhost:8080"
 timeout = "30s"
@@ -363,7 +371,7 @@ enabled = true
 // 覆盖正常获取、不存在 service、service 没有 options 等场景
 func TestLoader_GetServiceOptions(t *testing.T) {
 	t.Run("正常获取 service options", func(t *testing.T) {
-		configContent := `
+		configContent := testLLMConfig + `
 [server]
 addr = "localhost:8080"
 
@@ -404,7 +412,7 @@ api_key = "test-key"
 	})
 
 	t.Run("不存在的 service", func(t *testing.T) {
-		configContent := `
+		configContent := testLLMConfig + `
 [server]
 addr = "localhost:8080"
 
@@ -426,7 +434,7 @@ enabled = true
 	})
 
 	t.Run("service 没有 options", func(t *testing.T) {
-		configContent := `
+		configContent := testLLMConfig + `
 [server]
 addr = "localhost:8080"
 
@@ -457,7 +465,7 @@ func TestLoader_Get(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
 
-	configContent := `
+	configContent := testLLMConfig + `
 [server]
 addr = "localhost:8080"
 
@@ -531,7 +539,7 @@ enabled = true
 	})
 
 	t.Run("有效的 hostname_port 格式", func(t *testing.T) {
-		configContent := `
+		configContent := testLLMConfig + `
 [server]
 addr = "localhost:8080"
 timeout = "30s"
@@ -587,7 +595,7 @@ enabled = true
 	})
 
 	t.Run("有效的 service type", func(t *testing.T) {
-		configContent := `
+		configContent := testLLMConfig + `
 [server]
 addr = "localhost:8080"
 

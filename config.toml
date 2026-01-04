@@ -1,6 +1,21 @@
 # OneBlade SRE Agent 配置
 # 敏感信息请使用环境变量，格式：${VAR} 或 ${VAR:default}
 
+# LLM 配置（Orchestrator Agent 默认使用）
+[llm]
+provider = "openai"
+model = "${OPENAI_MODEL:gpt-4}"
+api_key = "${OPENAI_API_KEY}"
+base_url = "${OPENAI_BASE_URL:https://api.openai.com/v1}"
+timeout = "60s"
+max_tokens = 4096
+temperature = 0.7
+
+# SubAgent 特定配置（可选，未配置则继承主 LLM）
+# 用于成本优化：简单任务用便宜模型，复杂任务用强大模型
+[llm.agents.service_agent]
+model = "gpt-3.5-turbo"  # 数据查询等简单操作用更便宜的模型
+
 [server]
 addr = ":8080"
 timeout = "30s"
