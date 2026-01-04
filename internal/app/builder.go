@@ -10,18 +10,6 @@ import (
 	"github.com/oneblade/config"
 )
 
-// NewApplication 创建应用实例
-func NewApplication(configPath string) (*Application, error) {
-	loader, err := config.NewLoader(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("create config loader: %w", err)
-	}
-
-	return &Application{
-		cfg: loader,
-	}, nil
-}
-
 // buildModel 构建 LLM Model
 func buildModel(cfg *config.LLMConfig) (blades.ModelProvider, error) {
 	if cfg == nil {
