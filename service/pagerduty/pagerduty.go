@@ -27,20 +27,25 @@ func init() {
 
 type Options struct {
 	APIKey string `toml:"api_key" validate:"required"`
+	From   string `toml:"from"` // 可选：执行操作的用户 email，用于 PagerDuty API 的 From header
 }
 
 type Service struct {
 	name        string
 	description string
 	apiKey      string
+	from        string // 执行操作的用户 email
 	client      *pagerduty.Client
 }
 
 func NewService(meta service.ServiceMeta, opts *Options) *Service {
+	// From 字段用于 PagerDuty API 的 From header，标识执行操作的用户 email
+	// 如果未配置，留空字符串，PagerDuty 可能会使用 API key 关联的用户
 	return &Service{
 		name:        meta.Name,
 		description: meta.Description,
 		apiKey:      opts.APIKey,
+		from:        opts.From,
 		client:      pagerduty.NewClient(opts.APIKey),
 	}
 }
@@ -262,8 +267,9 @@ func (s *Service) snoozeAlert(ctx context.Context, params *SnoozeAlertParams) (R
 }
 
 func (s *Service) acknowledgeIncident(ctx context.Context, params *AcknowledgeIncidentParams) (Response, error) {
-	// Manage incidents takes a list of Reference objects
-	_, err := s.client.ManageIncidentsWithContext(ctx, s.apiKey, []pagerduty.ManageIncidentsOptions{
+	// ManageIncidentsWithContext 的第二个参数是 from（用户 email），用于 HTTP header 的 "From" 字段
+	// 如果 from 为空，PagerDuty 可能会使用 API key 关联的用户
+	_, err := s.client.ManageIncidentsWithContext(ctx, s.from, []pagerduty.ManageIncidentsOptions{
 		{
 			ID:     params.IncidentID,
 			Status: "acknowledged",
@@ -282,7 +288,9 @@ func (s *Service) acknowledgeIncident(ctx context.Context, params *AcknowledgeIn
 }
 
 func (s *Service) resolveIncident(ctx context.Context, params *ResolveIncidentParams) (Response, error) {
-	_, err := s.client.ManageIncidentsWithContext(ctx, s.apiKey, []pagerduty.ManageIncidentsOptions{
+	// ManageIncidentsWithContext 的第二个参数是 from（用户 email），用于 HTTP header 的 "From" 字段
+	// 如果 from 为空，PagerDuty 可能会使用 API key 关联的用户
+	_, err := s.client.ManageIncidentsWithContext(ctx, s.from, []pagerduty.ManageIncidentsOptions{
 		{
 			ID:     params.IncidentID,
 			Status: "resolved",
