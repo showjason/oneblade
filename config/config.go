@@ -33,7 +33,7 @@ type LLMConfig struct {
 // 即使多个 agent 使用相同的 provider，它们的 timeout、temperature 等参数
 // 也不会相互影响，因为每次调用 factory.Build 时都会创建独立的配置副本。
 func (c *LLMConfig) GetAgentStrict(agentName string) (*AgentLLMConfig, error) {
-	if c == nil || c.Agents == nil {
+	if c.Agents == nil {
 		return nil, ErrAgentLLMConfigNotFound(agentName)
 	}
 	cfg, ok := c.Agents[agentName]
