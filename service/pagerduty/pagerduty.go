@@ -96,11 +96,12 @@ type Response struct {
 // === Params ===
 
 type ListIncidentsParams struct {
-	Since      string   `json:"since" jsonschema:"Start time in RFC3339 format"`
-	Until      string   `json:"until" jsonschema:"End time in RFC3339 format"`
-	ServiceIDs []string `json:"service_ids,omitempty" jsonschema:"Filter by service IDs"`
-	Statuses   []string `json:"statuses,omitempty" jsonschema:"Filter by statuses: triggered, acknowledged, resolved"`
-	Limit      int      `json:"limit,omitempty"`
+	Since        string   `json:"since" jsonschema:"Start time in RFC3339 format"`
+	Until        string   `json:"until" jsonschema:"End time in RFC3339 format"`
+	ServiceIDs   []string `json:"service_ids,omitempty" jsonschema:"Filter by service IDs"`
+	ServiceNames []string `json:"service_names,omitempty" jsonschema:"Filter by service names (will be converted to service IDs)"`
+	Statuses     []string `json:"statuses,omitempty" jsonschema:"Filter by statuses: triggered, acknowledged, resolved"`
+	Limit        int      `json:"limit,omitempty"`
 }
 
 type SnoozeAlertParams struct {
@@ -127,6 +128,7 @@ type Incident struct {
 	Status      string `json:"status"`
 	Urgency     string `json:"urgency"`
 	ServiceName string `json:"service_name"`
+	ServiceID   string `json:"service_id"`
 	CreatedAt   string `json:"created_at"`
 	HTMLURL     string `json:"html_url"`
 }
@@ -195,13 +197,34 @@ func (s *Service) listIncidents(ctx context.Context, params *ListIncidentsParams
 		limit = 50
 	}
 
+	// 如果提供了 ServiceNames，先转换为 ServiceIDs
+	serviceIDs := params.ServiceIDs
+	if len(params.ServiceNames) > 0 {
+		nameToIDs, err := s.resolveServiceNamesToIDs(ctx, params.ServiceNames)
+		if err != nil {
+			return Response{Success: false, Message: fmt.Sprintf("failed to resolve service names: %v", err)}, nil
+		}
+		// 合并 ServiceIDs 和从 ServiceNames 解析出的 IDs（去重）
+		serviceIDMap := make(map[string]bool)
+		for _, id := range serviceIDs {
+			serviceIDMap[id] = true
+		}
+		for _, id := range nameToIDs {
+			serviceIDMap[id] = true
+		}
+		serviceIDs = make([]string, 0, len(serviceIDMap))
+		for id := range serviceIDMap {
+			serviceIDs = append(serviceIDs, id)
+		}
+	}
+
 	opts := pagerduty.ListIncidentsOptions{
 		Since: params.Since,
 		Until: params.Until,
 		Limit: uint(limit),
 	}
-	if len(params.ServiceIDs) > 0 {
-		opts.ServiceIDs = params.ServiceIDs
+	if len(serviceIDs) > 0 {
+		opts.ServiceIDs = serviceIDs
 	}
 	if len(params.Statuses) > 0 {
 		opts.Statuses = params.Statuses
@@ -213,6 +236,7 @@ func (s *Service) listIncidents(ctx context.Context, params *ListIncidentsParams
 	}
 
 	incidents := make([]Incident, len(resp.Incidents))
+	fmt.Println(resp.Incidents[0].Service)
 	for i, inc := range resp.Incidents {
 		incidents[i] = Incident{
 			ID:          inc.ID,
@@ -220,6 +244,7 @@ func (s *Service) listIncidents(ctx context.Context, params *ListIncidentsParams
 			Status:      inc.Status,
 			Urgency:     inc.Urgency,
 			ServiceName: inc.Service.Summary,
+			ServiceID:   inc.Service.ID,
 			CreatedAt:   inc.CreatedAt,
 			HTMLURL:     inc.HTMLURL,
 		}
@@ -231,6 +256,38 @@ func (s *Service) listIncidents(ctx context.Context, params *ListIncidentsParams
 		Incidents: incidents,
 		Total:     len(incidents),
 	}, nil
+}
+
+// resolveServiceNamesToIDs 根据 service name 列表查询对应的 service ID 列表
+func (s *Service) resolveServiceNamesToIDs(ctx context.Context, serviceNames []string) ([]string, error) {
+	// 查询所有 services
+	servicesResp, err := s.client.ListServicesWithContext(ctx, pagerduty.ListServiceOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list services: %w", err)
+	}
+
+	// 创建 name -> ID 的映射
+	nameToID := make(map[string]string)
+	for _, svc := range servicesResp.Services {
+		nameToID[svc.Name] = svc.ID
+	}
+
+	// 根据 serviceNames 查找对应的 IDs
+	var serviceIDs []string
+	var notFound []string
+	for _, name := range serviceNames {
+		if id, ok := nameToID[name]; ok {
+			serviceIDs = append(serviceIDs, id)
+		} else {
+			notFound = append(notFound, name)
+		}
+	}
+
+	if len(notFound) > 0 {
+		return serviceIDs, fmt.Errorf("service names not found: %v", notFound)
+	}
+
+	return serviceIDs, nil
 }
 
 func (s *Service) snoozeAlert(ctx context.Context, params *SnoozeAlertParams) (Response, error) {
