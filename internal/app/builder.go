@@ -51,6 +51,16 @@ func buildOpenAIModel(cfg *config.LLMConfig) (blades.ModelProvider, error) {
 		opts.BaseURL = cfg.BaseURL
 	}
 
+	// 设置 MaxOutputTokens（如果配置了）
+	if cfg.MaxTokens > 0 {
+		opts.MaxOutputTokens = int64(cfg.MaxTokens)
+	}
+
+	// 设置 Temperature（如果配置了）
+	if cfg.Temperature > 0 {
+		opts.Temperature = cfg.Temperature
+	}
+
 	// Note: Timeout 可以通过 http.Client 设置，但 openai.Config 不直接支持
 	// 如需支持超时，需要自定义 http.Client
 
