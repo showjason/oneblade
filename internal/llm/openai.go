@@ -2,6 +2,8 @@ package llm
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/go-kratos/blades"
 	"github.com/go-kratos/blades/contrib/openai"
@@ -10,7 +12,7 @@ import (
 )
 
 func buildOpenAI(cfg config.AgentLLMConfig) (blades.ModelProvider, error) {
-	apiKey := envOrValue(cfg.APIKey, "OPENAI_API_KEY")
+	apiKey := firstNonEmpty(strings.TrimSpace(cfg.APIKey), os.Getenv("OPENAI_API_KEY"))
 	if apiKey == "" {
 		return nil, fmt.Errorf("openai api key not configured (api_key or OPENAI_API_KEY)")
 	}

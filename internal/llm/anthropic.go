@@ -2,6 +2,8 @@ package llm
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/go-kratos/blades"
 	"github.com/go-kratos/blades/contrib/anthropic"
@@ -10,7 +12,7 @@ import (
 )
 
 func buildAnthropic(cfg config.AgentLLMConfig) (blades.ModelProvider, error) {
-	apiKey := envOrValue(cfg.APIKey, "ANTHROPIC_API_KEY")
+	apiKey := firstNonEmpty(strings.TrimSpace(cfg.APIKey), os.Getenv("ANTHROPIC_API_KEY"))
 	if apiKey == "" {
 		return nil, fmt.Errorf("anthropic api key not configured (api_key or ANTHROPIC_API_KEY)")
 	}

@@ -31,12 +31,3 @@ func buildGemini(ctx context.Context, cfg config.AgentLLMConfig) (blades.ModelPr
 
 	return gemini.NewModel(ctx, cfg.Model, opts)
 }
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
-}

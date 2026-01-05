@@ -3,7 +3,6 @@ package llm
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/go-kratos/blades"
@@ -68,9 +67,13 @@ func applyDefaults(cfg *config.AgentLLMConfig) {
 	}
 }
 
-func envOrValue(val, envKey string) string {
-	if strings.TrimSpace(val) != "" {
-		return val
+// firstNonEmpty 返回第一个非空字符串（去除首尾空格后）
+// 用于按优先级顺序检查配置值和环境变量
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
 	}
-	return os.Getenv(envKey)
+	return ""
 }
