@@ -30,5 +30,3 @@ func buildAnthropic(cfg config.AgentLLMConfig) (blades.ModelProvider, error) {
 
 	return anthropic.NewModel(cfg.Model, opts), nil
 }
-
-
