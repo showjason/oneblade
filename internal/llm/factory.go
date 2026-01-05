@@ -56,6 +56,16 @@ func applyDefaults(cfg *config.AgentLLMConfig) {
 	if cfg.Timeout == "" {
 		cfg.Timeout = "60s"
 	}
+
+	// 为可选字段设置默认值，避免各 builder 中重复的 nil 检查
+	if cfg.MaxTokens == nil {
+		defaultMaxTokens := 2048
+		cfg.MaxTokens = &defaultMaxTokens
+	}
+	if cfg.Temperature == nil {
+		defaultTemperature := 0.7
+		cfg.Temperature = &defaultTemperature
+	}
 }
 
 func envOrValue(val, envKey string) string {
@@ -64,5 +74,3 @@ func envOrValue(val, envKey string) string {
 	}
 	return os.Getenv(envKey)
 }
-
-

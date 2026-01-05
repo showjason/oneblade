@@ -28,6 +28,10 @@ type LLMConfig struct {
 
 // GetAgentStrict 获取指定 agent 的 LLM 配置（严格模式，不做继承）
 // 若 agent 未配置则返回错误。
+//
+// 注意：返回的是配置的副本（值拷贝），每个 agent 的配置完全独立。
+// 即使多个 agent 使用相同的 provider，它们的 timeout、temperature 等参数
+// 也不会相互影响，因为每次调用 factory.Build 时都会创建独立的配置副本。
 func (c *LLMConfig) GetAgentStrict(agentName string) (*AgentLLMConfig, error) {
 	if c == nil || c.Agents == nil {
 		return nil, ErrAgentLLMConfigNotFound(agentName)

@@ -24,14 +24,9 @@ func buildOpenAI(cfg config.AgentLLMConfig) (blades.ModelProvider, error) {
 		BaseURL: cfg.BaseURL,
 	}
 
-	if cfg.MaxTokens != nil {
-		opts.MaxOutputTokens = int64(*cfg.MaxTokens)
-	}
-	if cfg.Temperature != nil {
-		opts.Temperature = *cfg.Temperature
-	}
+	// applyDefaults 已确保这些字段不为 nil
+	opts.MaxOutputTokens = int64(*cfg.MaxTokens)
+	opts.Temperature = *cfg.Temperature
 
 	return openai.NewModel(cfg.Model, opts), nil
 }
-
-

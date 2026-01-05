@@ -25,12 +25,9 @@ func buildGemini(ctx context.Context, cfg config.AgentLLMConfig) (blades.ModelPr
 		APIKey: apiKey,
 	}
 
-	if cfg.MaxTokens != nil {
-		opts.MaxOutputTokens = int32(*cfg.MaxTokens)
-	}
-	if cfg.Temperature != nil {
-		opts.Temperature = float32(*cfg.Temperature)
-	}
+	// applyDefaults 已确保这些字段不为 nil
+	opts.MaxOutputTokens = int32(*cfg.MaxTokens)
+	opts.Temperature = float32(*cfg.Temperature)
 
 	return gemini.NewModel(ctx, cfg.Model, opts)
 }
@@ -43,5 +40,3 @@ func firstNonEmpty(vals ...string) string {
 	}
 	return ""
 }
-
-
