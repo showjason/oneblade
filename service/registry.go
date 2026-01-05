@@ -73,7 +73,7 @@ func (r *Registry) InitFromConfig(loader *config.Loader) error {
 		}
 
 		wg.Add(1)
-		go func() {
+		go func(name string, serviceCfg config.ServiceConfig) {
 			defer wg.Done()
 
 			// 获取原始配置数据
@@ -114,7 +114,7 @@ func (r *Registry) InitFromConfig(loader *config.Loader) error {
 			mu.Unlock()
 
 			log.Printf("[service] initialized %s", name)
-		}()
+		}(name, serviceCfg)
 	}
 
 	wg.Wait()
