@@ -50,7 +50,7 @@ func containsAny(s string, substrings []string) bool {
 
 // testLLMConfig 测试用的最小 LLM 配置
 const testLLMConfig = `
-[llm]
+[llm.agents.test_agent]
 provider = "openai"
 model = "gpt-4"
 api_key = "test-api-key"
@@ -316,7 +316,7 @@ func Test_expandEnv(t *testing.T) {
 func TestLoader_Load_DuplicateConfig(t *testing.T) {
 	t.Run("重复的顶级配置段", func(t *testing.T) {
 		// TOML 解析器会在解析阶段检测重复的键并报错
-		configContent := `
+		configContent := testLLMConfig + `
 [server]
 addr = "localhost:8080"
 
@@ -497,7 +497,7 @@ enabled = true
 // 覆盖 required、hostname_port、oneof 等验证规则
 func TestLoader_Load_ValidationError(t *testing.T) {
 	t.Run("缺少必需的 server.addr", func(t *testing.T) {
-		configContent := `
+		configContent := testLLMConfig + `
 [server]
 timeout = "30s"
 
@@ -519,7 +519,7 @@ enabled = true
 	})
 
 	t.Run("无效的 hostname_port 格式", func(t *testing.T) {
-		configContent := `
+		configContent := testLLMConfig + `
 [server]
 addr = "invalid-address"
 timeout = "30s"
@@ -558,7 +558,7 @@ enabled = true
 	})
 
 	t.Run("service type 不在允许的列表中", func(t *testing.T) {
-		configContent := `
+		configContent := testLLMConfig + `
 [server]
 addr = "localhost:8080"
 
@@ -577,7 +577,7 @@ enabled = true
 	})
 
 	t.Run("service 缺少 type", func(t *testing.T) {
-		configContent := `
+		configContent := testLLMConfig + `
 [server]
 addr = "localhost:8080"
 

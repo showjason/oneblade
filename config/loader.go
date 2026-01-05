@@ -52,6 +52,24 @@ func (l *Loader) Load() (*Config, error) {
 		return nil, fmt.Errorf("parse config file %s: %w", l.configPath, err)
 	}
 
+	// 严格模式：禁止存在未解码的配置项，避免拼写错误/过期配置被静默忽略。
+	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
+		// Note: `[services.<name>.options]` 采用 toml.Primitive 延迟解析，
+		// meta.Undecoded() 会把 options 下的 leaf keys 视为未解码，这是预期行为。
+		// 因此这里需要忽略该路径下的 keys。
+		var unknown []toml.Key
+		for _, k := range undecoded {
+			// Expected undecoded key example: ["services","prometheus","options","address"]
+			if len(k) >= 3 && k[0] == "services" && k[2] == "options" {
+				continue
+			}
+			unknown = append(unknown, k)
+		}
+		if len(unknown) > 0 {
+			return nil, fmt.Errorf("parse config file %s: unknown keys: %v", l.configPath, unknown)
+		}
+	}
+
 	// 验证配置
 	if err := l.validate(&cfg); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)

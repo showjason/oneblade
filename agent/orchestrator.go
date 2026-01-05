@@ -1,25 +1,50 @@
 package agent
 
 import (
+	"fmt"
+
 	"github.com/go-kratos/blades"
 	"github.com/go-kratos/blades/flow"
 
 	"github.com/oneblade/service"
 )
 
+type ModelResolver func(agentName string) (blades.ModelProvider, error)
+
 // Orchestrator 编排 Agent 配置
 type OrchestratorConfig struct {
-	Model    blades.ModelProvider
-	Services []service.Service
+	ResolveModel ModelResolver
+	Services     []service.Service
 }
 
 // NewOrchestratorAgent 创建主编排 Agent
 func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
+	if cfg.ResolveModel == nil {
+		return nil, fmt.Errorf("ResolveModel is required")
+	}
+
 	services := cfg.Services
+
+	serviceModel, err := cfg.ResolveModel("service_agent")
+	if err != nil {
+		return nil, err
+	}
+	predictionModel, err := cfg.ResolveModel("prediction_agent")
+	if err != nil {
+		return nil, err
+	}
+	reportModel, err := cfg.ResolveModel("report_agent")
+	if err != nil {
+		return nil, err
+	}
+	orchestratorModel, err := cfg.ResolveModel("sre_orchestrator")
+	if err != nil {
+		return nil, err
+	}
 
 	// 创建统一 Service Agent
 	serviceAgent, err := NewServiceAgent(ServiceAgent{
-		Model:    cfg.Model,
+		Model:    serviceModel,
 		Services: services,
 	})
 	if err != nil {
@@ -27,14 +52,14 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 	}
 
 	reportAgent, err := NewReportAgent(ReportAgentConfig{
-		Model: cfg.Model,
+		Model: reportModel,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	predictionAgent, err := NewPredictionAgent(PredictionAgentConfig{
-		Model: cfg.Model,
+		Model: predictionModel,
 	})
 	if err != nil {
 		return nil, err
@@ -56,7 +81,7 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 	return flow.NewRoutingAgent(flow.RoutingConfig{
 		Name:        "sre_orchestrator",
 		Description: "SRE 智能巡检系统主控 Agent",
-		Model:       cfg.Model,
+		Model:       orchestratorModel,
 		SubAgents: []blades.Agent{
 			analysisAgent,
 			serviceAgent, // 直接暴露 ServiceAgent 以便进行独立操作（如解决告警）

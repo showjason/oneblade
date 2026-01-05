@@ -9,6 +9,7 @@ import (
 
 	"github.com/oneblade/agent"
 	"github.com/oneblade/config"
+	"github.com/oneblade/internal/llm"
 	"github.com/oneblade/service"
 )
 
@@ -18,7 +19,7 @@ type Application struct {
 	cfg          *config.Loader
 	llmConfig    *config.LLMConfig
 	registry     *service.Registry
-	model        blades.ModelProvider
+	models       map[string]blades.ModelProvider
 	orchestrator blades.Agent
 	runner       *blades.Runner
 }
@@ -44,24 +45,37 @@ func (a *Application) Initialize(ctx context.Context) error {
 
 	a.llmConfig = &cfg.LLM
 
-	// Step 2: 初始化 LLM Model
-	model, err := buildModel(a.llmConfig)
-	if err != nil {
-		return fmt.Errorf("build model: %w", err)
-	}
-	a.model = model
-
-	// Step 3: 初始化 Service Registry
+	// Step 2: 初始化 Service Registry
 	registry := service.NewRegistry()
 	if err := registry.InitFromConfig(a.cfg); err != nil {
 		return fmt.Errorf("init registry: %w", err)
 	}
 	a.registry = registry
 
+	// Step 3: 初始化 LLM Factory（按 agentName 严格构建）
+	factory := llm.NewFactory()
+	models := make(map[string]blades.ModelProvider)
+	resolveModel := func(agentName string) (blades.ModelProvider, error) {
+		if m, ok := models[agentName]; ok {
+			return m, nil
+		}
+		agentCfg, err := a.llmConfig.GetAgentStrict(agentName)
+		if err != nil {
+			return nil, err
+		}
+		m, err := factory.Build(ctx, *agentCfg)
+		if err != nil {
+			return nil, fmt.Errorf("build model for %s: %w", agentName, err)
+		}
+		models[agentName] = m
+		return m, nil
+	}
+	a.models = models
+
 	// Step 4: 创建 Orchestrator Agent
 	orchestrator, err := agent.NewOrchestratorAgent(agent.OrchestratorConfig{
-		Model:    a.model,
-		Services: a.registry.All(),
+		ResolveModel: resolveModel,
+		Services:     a.registry.All(),
 	})
 	if err != nil {
 		return fmt.Errorf("create orchestrator: %w", err)
@@ -90,9 +104,11 @@ func (a *Application) Shutdown(ctx context.Context) error {
 	}
 
 	// 3. 关闭 model（如果支持 Closer 接口）
-	if closer, ok := a.model.(interface{ Close() error }); ok {
-		if err := closer.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("close model: %w", err))
+	for name, m := range a.models {
+		if closer, ok := m.(interface{ Close() error }); ok {
+			if err := closer.Close(); err != nil {
+				errs = append(errs, fmt.Errorf("close model %s: %w", name, err))
+			}
 		}
 	}
 

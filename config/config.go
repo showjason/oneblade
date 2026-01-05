@@ -6,60 +6,50 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// LLMConfig LLM 配置
+// AgentLLMConfig 单个 Agent 的 LLM 配置
+//
+// 说明：
+// - 本项目采用“严格 per-agent 配置”策略：不做继承/合并。
+// - required 字段缺失应在启动时直接报错；可选字段缺失由运行时填充默认值。
+type AgentLLMConfig struct {
+	Provider    string   `toml:"provider" validate:"required,oneof=openai gemini anthropic"`
+	Model       string   `toml:"model" validate:"required"`
+	APIKey      string   `toml:"api_key"` // 可选：允许从环境变量读取（运行时校验）
+	BaseURL     string   `toml:"base_url"`
+	Timeout     string   `toml:"timeout"`
+	MaxTokens   *int     `toml:"max_tokens" validate:"omitempty,gt=0"`
+	Temperature *float64 `toml:"temperature" validate:"omitempty,gte=0,lte=2"`
+}
+
+// LLMConfig LLM 配置（仅包含每个 agent 的独立配置）
 type LLMConfig struct {
-	Provider    string                `toml:"provider" validate:"required"`
-	Model       string                `toml:"model" validate:"required"`
-	APIKey      string                `toml:"api_key" validate:"required"`
-	BaseURL     string                `toml:"base_url"`
-	Timeout     string                `toml:"timeout"`
-	MaxTokens   int                   `toml:"max_tokens" validate:"omitempty,gt=0"`
-	Temperature float64               `toml:"temperature" validate:"omitempty,gte=0,lte=2"`
-	Agents      map[string]*LLMConfig `toml:"agents"` // SubAgent 特定配置
+	Agents map[string]AgentLLMConfig `toml:"agents" validate:"required,min=1,dive"`
 }
 
-// Merge 合并配置（子配置继承父配置未设置的字段）
-// 返回一个新的 LLMConfig，不修改原配置
-func (c *LLMConfig) Merge(parent *LLMConfig) *LLMConfig {
-	if parent == nil {
-		return c
+// GetAgentStrict 获取指定 agent 的 LLM 配置（严格模式，不做继承）
+// 若 agent 未配置则返回错误。
+func (c *LLMConfig) GetAgentStrict(agentName string) (*AgentLLMConfig, error) {
+	if c == nil || c.Agents == nil {
+		return nil, ErrAgentLLMConfigNotFound(agentName)
 	}
-	result := *c
-	if result.Provider == "" {
-		result.Provider = parent.Provider
+	cfg, ok := c.Agents[agentName]
+	if !ok {
+		return nil, ErrAgentLLMConfigNotFound(agentName)
 	}
-	if result.Model == "" {
-		result.Model = parent.Model
-	}
-	if result.APIKey == "" {
-		result.APIKey = parent.APIKey
-	}
-	if result.BaseURL == "" {
-		result.BaseURL = parent.BaseURL
-	}
-	if result.Timeout == "" {
-		result.Timeout = parent.Timeout
-	}
-	if result.MaxTokens == 0 {
-		result.MaxTokens = parent.MaxTokens
-	}
-	if result.Temperature == 0 {
-		result.Temperature = parent.Temperature
-	}
-	return &result
+	return &cfg, nil
 }
 
-// GetAgentConfig 获取指定 agent 的 LLM 配置
-// 如果 agent 未配置则返回主 LLM 配置
-func (c *LLMConfig) GetAgentConfig(agentName string) *LLMConfig {
-	if c.Agents == nil {
-		return c
-	}
-	agentCfg, ok := c.Agents[agentName]
-	if !ok || agentCfg == nil {
-		return c
-	}
-	return agentCfg.Merge(c)
+// ErrAgentLLMConfigNotFound 缺失 agent 配置错误
+func ErrAgentLLMConfigNotFound(agentName string) error {
+	return &AgentLLMConfigNotFoundError{AgentName: agentName}
+}
+
+type AgentLLMConfigNotFoundError struct {
+	AgentName string
+}
+
+func (e *AgentLLMConfigNotFoundError) Error() string {
+	return "llm config not found for agent: " + e.AgentName
 }
 
 // Config 根配置结构
