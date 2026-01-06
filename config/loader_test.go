@@ -59,8 +59,7 @@ api_key = "test-api-key"
 // TestNewLoader 测试创建配置加载器
 // 验证加载器能正确创建并保存配置文件路径
 func TestNewLoader(t *testing.T) {
-	loader, err := NewLoader("./test.toml")
-	require.NoError(t, err)
+	loader := NewLoader("./test.toml")
 	assert.NotNil(t, loader)
 	assert.Equal(t, "./test.toml", loader.ConfigPath())
 }
@@ -92,8 +91,7 @@ enabled = false
 `
 	configPath := createTempConfig(t, configContent)
 
-	loader, err := NewLoader(configPath)
-	require.NoError(t, err)
+	loader := NewLoader(configPath)
 
 	cfg, err := loader.Load()
 	require.NoError(t, err)
@@ -107,10 +105,9 @@ enabled = false
 // 验证错误消息包含文件路径和明确的错误信息
 func TestLoader_Load_FileNotFound(t *testing.T) {
 	nonExistentPath := "/nonexistent/config.toml"
-	loader, err := NewLoader(nonExistentPath)
-	require.NoError(t, err)
+	loader := NewLoader(nonExistentPath)
 
-	_, err = loader.Load()
+	_, err := loader.Load()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "load config file")
 	assert.Contains(t, err.Error(), nonExistentPath)
@@ -122,10 +119,9 @@ func TestLoader_Load_InvalidTOML(t *testing.T) {
 	configContent := `invalid toml content [`
 	configPath := createTempConfig(t, configContent)
 
-	loader, err := NewLoader(configPath)
-	require.NoError(t, err)
+	loader := NewLoader(configPath)
 
-	_, err = loader.Load()
+	_, err := loader.Load()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parse config file")
 	assert.Contains(t, err.Error(), configPath)
@@ -194,8 +190,7 @@ enabled = true
 			cleanup := setupEnvVars(t, tt.envVars)
 			defer cleanup()
 
-			loader, err := NewLoader(configPath)
-			require.NoError(t, err)
+			loader := NewLoader(configPath)
 
 			cfg, err := loader.Load()
 			require.NoError(t, err)
@@ -329,10 +324,9 @@ enabled = true
 `
 		configPath := createTempConfig(t, configContent)
 
-		loader, err := NewLoader(configPath)
-		require.NoError(t, err)
+		loader := NewLoader(configPath)
 
-		_, err = loader.Load()
+		_, err := loader.Load()
 		// TOML 库会在解析阶段检测到重复配置并报错
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "parse config file")
@@ -358,10 +352,9 @@ enabled = true
 `
 		configPath := createTempConfig(t, configContent)
 
-		loader, err := NewLoader(configPath)
-		require.NoError(t, err)
+		loader := NewLoader(configPath)
 
-		_, err = loader.Load()
+		_, err := loader.Load()
 		require.NoError(t, err)
 		assert.NotNil(t, loader)
 	})
@@ -392,10 +385,9 @@ api_key = "test-key"
 `
 		configPath := createTempConfig(t, configContent)
 
-		loader, err := NewLoader(configPath)
-		require.NoError(t, err)
+		loader := NewLoader(configPath)
 
-		_, err = loader.Load()
+		_, err := loader.Load()
 		require.NoError(t, err)
 
 		// Get prometheus service options
@@ -422,10 +414,9 @@ enabled = true
 `
 		configPath := createTempConfig(t, configContent)
 
-		loader, err := NewLoader(configPath)
-		require.NoError(t, err)
+		loader := NewLoader(configPath)
 
-		_, err = loader.Load()
+		_, err := loader.Load()
 		require.NoError(t, err)
 
 		_, _, err = loader.GetServiceOptions("nonexistent")
@@ -444,10 +435,9 @@ enabled = true
 `
 		configPath := createTempConfig(t, configContent)
 
-		loader, err := NewLoader(configPath)
-		require.NoError(t, err)
+		loader := NewLoader(configPath)
 
-		_, err = loader.Load()
+		_, err := loader.Load()
 		require.NoError(t, err)
 
 		// Service 存在但没有 options，应该能正常返回（primitive 可能为空）
@@ -476,12 +466,12 @@ enabled = true
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	require.NoError(t, err)
 
-	loader, err := NewLoader(configPath)
-	require.NoError(t, err)
+	loader := NewLoader(configPath)
 
 	// Before loading, Get should return error
 	_, err = loader.Get()
-	assert.Error(t, err)
+	require.NoError(t, err)
+	require.Error(t, err)
 
 	// After loading
 	_, err = loader.Load()
@@ -507,10 +497,9 @@ enabled = true
 `
 		configPath := createTempConfig(t, configContent)
 
-		loader, err := NewLoader(configPath)
-		require.NoError(t, err)
+		loader := NewLoader(configPath)
 
-		_, err = loader.Load()
+		_, err := loader.Load()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "validate config")
 		// 验证错误应该包含 Addr 字段的信息
@@ -530,10 +519,9 @@ enabled = true
 `
 		configPath := createTempConfig(t, configContent)
 
-		loader, err := NewLoader(configPath)
-		require.NoError(t, err)
+		loader := NewLoader(configPath)
 
-		_, err = loader.Load()
+		_, err := loader.Load()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "validate config")
 	})
@@ -550,10 +538,9 @@ enabled = true
 `
 		configPath := createTempConfig(t, configContent)
 
-		loader, err := NewLoader(configPath)
-		require.NoError(t, err)
+		loader := NewLoader(configPath)
 
-		_, err = loader.Load()
+		_, err := loader.Load()
 		require.NoError(t, err)
 	})
 
@@ -568,10 +555,9 @@ enabled = true
 `
 		configPath := createTempConfig(t, configContent)
 
-		loader, err := NewLoader(configPath)
-		require.NoError(t, err)
+		loader := NewLoader(configPath)
 
-		_, err = loader.Load()
+		_, err := loader.Load()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "validate config")
 	})
@@ -586,10 +572,9 @@ enabled = true
 `
 		configPath := createTempConfig(t, configContent)
 
-		loader, err := NewLoader(configPath)
-		require.NoError(t, err)
+		loader := NewLoader(configPath)
 
-		_, err = loader.Load()
+		_, err := loader.Load()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "validate config")
 	})
@@ -613,10 +598,9 @@ enabled = true
 `
 		configPath := createTempConfig(t, configContent)
 
-		loader, err := NewLoader(configPath)
-		require.NoError(t, err)
+		loader := NewLoader(configPath)
 
-		_, err = loader.Load()
+		_, err := loader.Load()
 		require.NoError(t, err)
 	})
 }

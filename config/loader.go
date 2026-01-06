@@ -18,14 +18,13 @@ type Loader struct {
 }
 
 // NewLoader 创建配置加载器
-// configPath: 配置文件路径 (如 "./config.toml")
-func NewLoader(configPath string) (*Loader, error) {
+func NewLoader(configPath string) *Loader {
 	loader := &Loader{
 		configPath:  configPath,
 		validator:   validator.New(),
 		serviceMeta: make(map[string]*toml.MetaData),
 	}
-	return loader, nil
+	return loader
 }
 
 // extractServiceMeta 提取每个 service 的元数据

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -14,7 +15,7 @@ import (
 type AgentLLMConfig struct {
 	Provider    string   `toml:"provider" validate:"required,oneof=openai gemini anthropic"`
 	Model       string   `toml:"model" validate:"required"`
-	APIKey      string   `toml:"api_key"` // 可选：允许从环境变量读取（运行时校验）
+	APIKey      string   `toml:"api_key"`
 	BaseURL     string   `toml:"base_url"`
 	Timeout     string   `toml:"timeout"`
 	MaxTokens   *int     `toml:"max_tokens" validate:"omitempty,gt=0"`
@@ -34,26 +35,13 @@ type LLMConfig struct {
 // 也不会相互影响，因为每次调用 factory.Build 时都会创建独立的配置副本。
 func (c *LLMConfig) GetAgentStrict(agentName string) (*AgentLLMConfig, error) {
 	if c.Agents == nil {
-		return nil, ErrAgentLLMConfigNotFound(agentName)
+		return nil, fmt.Errorf("LLM config not found for any agent")
 	}
 	cfg, ok := c.Agents[agentName]
 	if !ok {
-		return nil, ErrAgentLLMConfigNotFound(agentName)
+		return nil, fmt.Errorf("LLM config not found for agent: %s", agentName)
 	}
 	return &cfg, nil
-}
-
-// ErrAgentLLMConfigNotFound 缺失 agent 配置错误
-func ErrAgentLLMConfigNotFound(agentName string) error {
-	return &AgentLLMConfigNotFoundError{AgentName: agentName}
-}
-
-type AgentLLMConfigNotFoundError struct {
-	AgentName string
-}
-
-func (e *AgentLLMConfigNotFoundError) Error() string {
-	return "llm config not found for agent: " + e.AgentName
 }
 
 // Config 根配置结构

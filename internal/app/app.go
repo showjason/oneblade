@@ -25,10 +25,7 @@ type Application struct {
 }
 
 func NewApplication(configPath string) (*Application, error) {
-	loader, err := config.NewLoader(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("create config loader: %w", err)
-	}
+	loader := config.NewLoader(configPath)
 
 	return &Application{
 		cfg: loader,
