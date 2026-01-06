@@ -3,6 +3,7 @@ package pagerduty
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -96,8 +97,8 @@ type Response struct {
 // === Params ===
 
 type ListIncidentsParams struct {
-	Since        string   `json:"since" jsonschema:"Start time in RFC3339 format"`
-	Until        string   `json:"until" jsonschema:"End time in RFC3339 format"`
+	Since        string   `json:"since,omitempty" jsonschema:"Start time in RFC3339 format, defaults to 24 hours ago if not provided"`
+	Until        string   `json:"until,omitempty" jsonschema:"End time in RFC3339 format, defaults to now if not provided"`
 	ServiceIDs   []string `json:"service_ids,omitempty" jsonschema:"Filter by service IDs"`
 	ServiceNames []string `json:"service_names,omitempty" jsonschema:"Filter by service names (will be converted to service IDs)"`
 	Statuses     []string `json:"statuses,omitempty" jsonschema:"Filter by statuses: triggered, acknowledged, resolved"`
@@ -136,6 +137,9 @@ type Incident struct {
 // === Logic ===
 
 func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
+	// 添加日志以追踪工具调用
+	log.Printf("[pagerduty] Handle called with operation: %s", req.Operation)
+
 	switch req.Operation {
 	case ListIncidents:
 		if req.ListIncidents == nil {
@@ -192,9 +196,24 @@ func (s *Service) Close() error {
 // === Implementations ===
 
 func (s *Service) listIncidents(ctx context.Context, params *ListIncidentsParams) (Response, error) {
+	log.Printf("[pagerduty] listIncidents called with params: limit=%d, statuses=%v", params.Limit, params.Statuses)
+
 	limit := params.Limit
 	if limit == 0 {
 		limit = 50
+	}
+
+	// 如果 since 和 until 未提供，使用默认值（过去24小时）
+	since := params.Since
+	until := params.Until
+	if since == "" || until == "" {
+		now := time.Now()
+		if until == "" {
+			until = now.Format(time.RFC3339)
+		}
+		if since == "" {
+			since = now.Add(-24 * time.Hour).Format(time.RFC3339)
+		}
 	}
 
 	// 如果提供了 ServiceNames，先转换为 ServiceIDs
@@ -219,8 +238,8 @@ func (s *Service) listIncidents(ctx context.Context, params *ListIncidentsParams
 	}
 
 	opts := pagerduty.ListIncidentsOptions{
-		Since: params.Since,
-		Until: params.Until,
+		Since: since,
+		Until: until,
 		Limit: uint(limit),
 	}
 	if len(serviceIDs) > 0 {
@@ -235,8 +254,16 @@ func (s *Service) listIncidents(ctx context.Context, params *ListIncidentsParams
 		return Response{Success: false, Message: err.Error()}, nil
 	}
 
+	if len(resp.Incidents) == 0 {
+		return Response{
+			Operation: ListIncidents,
+			Success:   true,
+			Incidents: []Incident{},
+			Total:     0,
+		}, nil
+	}
+
 	incidents := make([]Incident, len(resp.Incidents))
-	fmt.Println(resp.Incidents[0].Service)
 	for i, inc := range resp.Incidents {
 		incidents[i] = Incident{
 			ID:          inc.ID,

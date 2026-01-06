@@ -56,7 +56,7 @@ write_timeout = "3s"
 # Service 配置 - 使用 map 结构，支持动态扩展
 [services.prometheus]
 type = "prometheus"
-enabled = true
+enabled = false
 [services.prometheus.options]
 address = "${PROMETHEUS_URL:http://localhost:9090}"
 timeout = "30s"
@@ -70,7 +70,7 @@ api_key = "${PAGERDUTY_API_KEY}"
 
 [services.opensearch]
 type = "opensearch"
-enabled = true
+enabled = false
 [services.opensearch.options]
 addresses = ["${OPENSEARCH_URL:http://localhost:9200}"]
 username = "${OPENSEARCH_USER}"
