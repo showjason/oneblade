@@ -8,11 +8,14 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/PagerDuty/go-pagerduty v1.8.0
 	github.com/go-kratos/blades v0.3.1
+	github.com/go-kratos/blades/contrib/anthropic v0.3.0
+	github.com/go-kratos/blades/contrib/gemini v0.3.0
 	github.com/go-kratos/blades/contrib/openai v0.3.0
 	github.com/go-playground/validator/v10 v10.30.1
 	github.com/opensearch-project/opensearch-go/v2 v2.3.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
+	google.golang.org/genai v1.26.0
 )
 
 require (
@@ -22,8 +25,6 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.13.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
-	github.com/go-kratos/blades/contrib/anthropic v0.3.0 // indirect
-	github.com/go-kratos/blades/contrib/gemini v0.3.0 // indirect
 	github.com/go-kratos/kit v0.0.0-20251121083925-65298ad2aa44 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
@@ -55,7 +56,6 @@ require (
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
-	google.golang.org/genai v1.26.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250908214217-97024824d090 // indirect
 	google.golang.org/grpc v1.75.1 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
