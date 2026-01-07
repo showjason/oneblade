@@ -1,10 +1,14 @@
 # OneBlade SRE Agent 配置
 # 敏感信息请使用环境变量，格式：${VAR} 或 ${VAR:default}
 
-# LLM 配置（严格 per-agent，不支持继承）
+# Agent 配置（严格 per-agent，不支持继承）
 # 每个 agent 必须完整定义 required 字段：provider/model
+# orchestrator 必须 enabled=true
+# 子 agents（service_agent, prediction_agent, report_agent）中至少有一个必须 enabled=true
 
-[llm.agents.sre_orchestrator]
+[agents.orchestrator]
+enabled = true
+[agents.orchestrator.llm]
 provider = "gemini"
 model = "${GEMINI_MODEL:gemini-2.5-flash}"
 api_key = "${GEMINI_API_KEY}"
@@ -13,7 +17,9 @@ timeout = "60s"
 max_tokens = 4096
 temperature = 0.2
 
-[llm.agents.service_agent]
+[agents.service_agent]
+enabled = true
+[agents.service_agent.llm]
 provider = "gemini"
 model = "${GEMINI_MODEL:gemini-2.0-flash-001}"
 api_key = "${GEMINI_API_KEY}"
@@ -22,7 +28,9 @@ timeout = "60s"
 max_tokens = 4096
 temperature = 0.2
 
-[llm.agents.prediction_agent]
+[agents.prediction_agent]
+enabled = false
+[agents.prediction_agent.llm]
 provider = "gemini"
 model = "${GEMINI_MODEL:gemini-2.5-flash}"
 api_key = "${GEMINI_API_KEY}"
@@ -31,7 +39,9 @@ timeout = "60s"
 max_tokens = 4096
 temperature = 0.2
 
-[llm.agents.report_agent]
+[agents.report_agent]
+enabled = false
+[agents.report_agent.llm]
 provider = "gemini"
 model = "${GEMINI_MODEL:gemini-2.5-flash}"
 api_key = "${GEMINI_API_KEY}"

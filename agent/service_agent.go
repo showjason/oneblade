@@ -4,6 +4,7 @@ import (
 	"github.com/go-kratos/blades"
 	"github.com/go-kratos/blades/tools"
 
+	"github.com/oneblade/internal/consts"
 	"github.com/oneblade/service"
 )
 
@@ -26,7 +27,7 @@ func NewServiceAgent(cfg ServiceAgent) (blades.Agent, error) {
 	}
 
 	return blades.NewAgent(
-		"service_agent",
+		consts.AgentNameService,
 		blades.WithDescription("负责与 Prometheus、PagerDuty、OpenSearch 等服务交互的 Agent，提供数据采集和操作能力"),
 		blades.WithInstruction(`你是一个 SRE 服务交互专家。
 

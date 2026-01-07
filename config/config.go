@@ -22,33 +22,29 @@ type AgentLLMConfig struct {
 	Temperature *float64 `toml:"temperature" validate:"omitempty,gte=0,lte=2"`
 }
 
-// LLMConfig LLM 配置（仅包含每个 agent 的独立配置）
-type LLMConfig struct {
-	Agents map[string]AgentLLMConfig `toml:"agents" validate:"required,min=1,dive"`
+// AgentConfig Agent 配置
+// 包含 enabled 开关和 LLM 配置
+type AgentConfig struct {
+	Enabled bool           `toml:"enabled"`
+	LLM     AgentLLMConfig `toml:"llm"`
 }
 
-// GetAgentStrict 获取指定 agent 的 LLM 配置（严格模式，不做继承）
-// 若 agent 未配置则返回错误。
-//
-// 注意：返回的是配置的副本（值拷贝），每个 agent 的配置完全独立。
-// 即使多个 agent 使用相同的 provider，它们的 timeout、temperature 等参数
-// 也不会相互影响，因为每次调用 factory.Build 时都会创建独立的配置副本。
-func (c *LLMConfig) GetAgentStrict(agentName string) (*AgentLLMConfig, error) {
-	if c.Agents == nil {
-		return nil, fmt.Errorf("LLM config not found for any agent")
+func (c *Config) GetAgentConfig(agentName string) (*AgentConfig, error) {
+	if len(c.Agents) == 0 {
+		return nil, fmt.Errorf("no agents configured")
 	}
-	cfg, ok := c.Agents[agentName]
+	acfg, ok := c.Agents[agentName]
 	if !ok {
-		return nil, fmt.Errorf("LLM config not found for agent: %s", agentName)
+		return nil, fmt.Errorf("agent %s not found", agentName)
 	}
-	return &cfg, nil
+	return &acfg, nil
 }
 
 // Config 根配置结构
 type Config struct {
 	Server   ServerConfig             `toml:"server" validate:"required"`
 	Data     DataConfig               `toml:"data"`
-	LLM      LLMConfig                `toml:"llm" validate:"required"`
+	Agents   map[string]AgentConfig   `toml:"agents" validate:"required,dive"`
 	Services map[string]ServiceConfig `toml:"services" validate:"required,dive"`
 }
 

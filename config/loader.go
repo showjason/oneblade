@@ -7,6 +7,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/go-playground/validator/v10"
+
+	"github.com/oneblade/internal/consts"
 )
 
 // Loader 配置加载器
@@ -74,6 +76,17 @@ func (l *Loader) Load() (*Config, error) {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
 
+	// 验证 agent 强制规则
+	if err := l.validateAgentRules(&cfg); err != nil {
+		return nil, fmt.Errorf("validate agent rules: %w", err)
+	}
+
+	// 筛选 enabled agents
+	l.filterEnabledAgents(&cfg)
+
+	// 筛选 enabled services
+	l.filterEnabledServices(&cfg)
+
 	// 提取 service 元数据
 	l.extractServiceMeta(&meta, &cfg)
 
@@ -122,6 +135,55 @@ func expandEnv(s string) string {
 // validate 验证配置
 func (l *Loader) validate(cfg *Config) error {
 	return l.validator.Struct(cfg)
+}
+
+// validateAgentRules 验证 agent 的强制规则
+func (l *Loader) validateAgentRules(cfg *Config) error {
+	subAgentNames := []string{consts.AgentNameService, consts.AgentNamePrediction, consts.AgentNameReport}
+
+	// 验证 orchestrator 必须存在且开启
+	orchestrator, ok := cfg.Agents[consts.AgentNameOrchestrator]
+	if !ok {
+		return fmt.Errorf("orchestrator agent %s is required but not found", consts.AgentNameOrchestrator)
+	}
+	if !orchestrator.Enabled {
+		return fmt.Errorf("orchestrator agent %s must be enabled", consts.AgentNameOrchestrator)
+	}
+
+	// 验证子 agents 至少一个开启
+	enabledSubAgents := 0
+	for _, name := range subAgentNames {
+		if agent, ok := cfg.Agents[name]; ok && agent.Enabled {
+			enabledSubAgents++
+		}
+	}
+	if enabledSubAgents == 0 {
+		return fmt.Errorf("at least one sub agent (%s, %s, %s) must be enabled", consts.AgentNameService, consts.AgentNamePrediction, consts.AgentNameReport)
+	}
+
+	return nil
+}
+
+// filterEnabledAgents 筛选出 enabled 的 agents
+func (l *Loader) filterEnabledAgents(cfg *Config) {
+	enabledAgents := make(map[string]AgentConfig)
+	for name, agent := range cfg.Agents {
+		if agent.Enabled {
+			enabledAgents[name] = agent
+		}
+	}
+	cfg.Agents = enabledAgents
+}
+
+// filterEnabledServices 筛选出 enabled 的 services
+func (l *Loader) filterEnabledServices(cfg *Config) {
+	enabledServices := make(map[string]ServiceConfig)
+	for name, service := range cfg.Services {
+		if service.Enabled {
+			enabledServices[name] = service
+		}
+	}
+	cfg.Services = enabledServices
 }
 
 // Get 获取当前配置

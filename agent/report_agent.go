@@ -2,6 +2,8 @@ package agent
 
 import (
 	"github.com/go-kratos/blades"
+
+	"github.com/oneblade/internal/consts"
 )
 
 // ReportAgentConfig 报告生成 Agent 配置
@@ -12,7 +14,7 @@ type ReportAgentConfig struct {
 // NewReportAgent 创建报告生成 Agent
 func NewReportAgent(cfg ReportAgentConfig) (blades.Agent, error) {
 	return blades.NewAgent(
-		"report_agent",
+		consts.AgentNameReport,
 		blades.WithDescription("负责汇总分析数据并生成巡检报告的 Agent"),
 		blades.WithInstruction(`你是一个巡检报告撰写专家。
 

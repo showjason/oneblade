@@ -6,6 +6,7 @@ import (
 	"github.com/go-kratos/blades"
 	"github.com/go-kratos/blades/flow"
 
+	"github.com/oneblade/internal/consts"
 	"github.com/oneblade/service"
 )
 
@@ -25,19 +26,19 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 
 	services := cfg.Services
 
-	serviceModel, err := cfg.ResolveModel("service_agent")
+	serviceModel, err := cfg.ResolveModel(consts.AgentNameService)
 	if err != nil {
 		return nil, err
 	}
-	predictionModel, err := cfg.ResolveModel("prediction_agent")
+	predictionModel, err := cfg.ResolveModel(consts.AgentNamePrediction)
 	if err != nil {
 		return nil, err
 	}
-	reportModel, err := cfg.ResolveModel("report_agent")
+	reportModel, err := cfg.ResolveModel(consts.AgentNameReport)
 	if err != nil {
 		return nil, err
 	}
-	orchestratorModel, err := cfg.ResolveModel("sre_orchestrator")
+	orchestratorModel, err := cfg.ResolveModel(consts.AgentNameOrchestrator)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +69,7 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 	// 创建顺序分析流程: 数据采集/服务操作 -> 预测分析 -> 报告生成
 	// 注意: 这里的 serviceAgent 替代了原先的 dataCollectionAgent
 	analysisAgent := flow.NewSequentialAgent(flow.SequentialConfig{
-		Name:        "analysis_agent",
+		Name:        consts.AgentNameAnalysis,
 		Description: "顺序执行数据采集、预测分析和报告生成",
 		SubAgents: []blades.Agent{
 			serviceAgent,
@@ -79,7 +80,7 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 
 	// 创建主编排 Agent（支持智能路由）
 	return flow.NewRoutingAgent(flow.RoutingConfig{
-		Name:        "sre_orchestrator",
+		Name:        consts.AgentNameOrchestrator,
 		Description: "SRE 智能巡检系统主控 Agent",
 		Model:       orchestratorModel,
 		SubAgents: []blades.Agent{

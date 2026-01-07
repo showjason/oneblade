@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/go-kratos/blades"
@@ -17,7 +18,7 @@ import (
 // 管理所有依赖和生命周期
 type Application struct {
 	cfg          *config.Loader
-	llmConfig    *config.LLMConfig
+	agents       map[string]*config.AgentConfig
 	registry     *service.Registry
 	models       map[string]blades.ModelProvider
 	orchestrator blades.Agent
@@ -34,14 +35,20 @@ func NewApplication(configPath string) (*Application, error) {
 
 // Initialize 初始化所有依赖
 func (a *Application) Initialize(ctx context.Context) error {
-	// Step 1: 加载配置
+	// Step 1: 加载配置（已包含验证和筛选 enabled agents）
 	cfg, err := a.cfg.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	a.llmConfig = &cfg.LLM
-
+	// cfg.Agents 已经只包含 enabled 的 agents
+	a.agents = make(map[string]*config.AgentConfig)
+	for name, acfg := range cfg.Agents {
+		a.agents[name] = &acfg
+	}
+	if len(a.agents) == 0 {
+		return fmt.Errorf("no agents configured")
+	}
 	// Step 2: 初始化 Service Registry
 	registry := service.NewRegistry()
 	if err := registry.InitFromConfig(a.cfg); err != nil {
@@ -50,17 +57,33 @@ func (a *Application) Initialize(ctx context.Context) error {
 	a.registry = registry
 
 	// Step 3: 初始化 LLM Factory（按 agentName 严格构建）
+	// 注意：a.agents 只包含 enabled 的 agents，无需再次检查
 	factory := llm.NewFactory()
 	models := make(map[string]blades.ModelProvider)
+	var modelsMu sync.RWMutex
 	resolveModel := func(agentName string) (blades.ModelProvider, error) {
+		// 先尝试读锁读取
+		modelsMu.RLock()
+		if m, ok := models[agentName]; ok {
+			modelsMu.RUnlock()
+			return m, nil
+		}
+		modelsMu.RUnlock()
+
+		// 需要构建，使用写锁
+		modelsMu.Lock()
+		defer modelsMu.Unlock()
+
+		// double-check: 可能在等待锁期间其他 goroutine 已经构建完成
 		if m, ok := models[agentName]; ok {
 			return m, nil
 		}
-		agentCfg, err := a.llmConfig.GetAgentStrict(agentName)
-		if err != nil {
-			return nil, err
+
+		agentCfg, ok := a.agents[agentName]
+		if !ok {
+			return nil, fmt.Errorf("agent %s not found or disabled", agentName)
 		}
-		m, err := factory.Build(ctx, *agentCfg)
+		m, err := factory.Build(ctx, agentCfg.LLM)
 		if err != nil {
 			return nil, fmt.Errorf("build model for %s: %w", agentName, err)
 		}
@@ -121,11 +144,6 @@ func (a *Application) Run(ctx context.Context, input *blades.Message) (*blades.M
 		return nil, fmt.Errorf("application not initialized")
 	}
 	return a.runner.Run(ctx, input)
-}
-
-// GetLLMConfig 获取 LLM 配置
-func (a *Application) GetLLMConfig() *config.LLMConfig {
-	return a.llmConfig
 }
 
 // GetRegistry 获取服务注册表

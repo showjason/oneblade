@@ -48,9 +48,25 @@ func containsAny(s string, substrings []string) bool {
 	return false
 }
 
-// testLLMConfig 测试用的最小 LLM 配置
-const testLLMConfig = `
-[llm.agents.test_agent]
+// testAgentConfig 测试用的最小 Agent 配置
+const testAgentConfig = `
+[agents.orchestrator]
+enabled = true
+[agents.orchestrator.llm]
+provider = "openai"
+model = "gpt-4"
+api_key = "test-api-key"
+
+[agents.service_agent]
+enabled = true
+[agents.service_agent.llm]
+provider = "openai"
+model = "gpt-4"
+api_key = "test-api-key"
+
+[agents.test_agent]
+enabled = true
+[agents.test_agent.llm]
 provider = "openai"
 model = "gpt-4"
 api_key = "test-api-key"
@@ -67,7 +83,7 @@ func TestNewLoader(t *testing.T) {
 // TestLoader_Load_ValidConfig 测试加载有效配置
 // 验证配置能正确解析并包含所有预期的字段和值
 func TestLoader_Load_ValidConfig(t *testing.T) {
-	configContent := testLLMConfig + `
+	configContent := testAgentConfig + `
 [server]
 addr = "localhost:8080"
 timeout = "30s"
@@ -139,7 +155,7 @@ func TestLoader_Load_WithEnvVars(t *testing.T) {
 	}{
 		{
 			name: "使用默认值",
-			configContent: testLLMConfig + `
+			configContent: testAgentConfig + `
 [server]
 addr = "${SERVER_ADDR:localhost:8080}"
 timeout = "${TIMEOUT:30s}"
@@ -154,7 +170,7 @@ enabled = true
 		},
 		{
 			name: "环境变量覆盖默认值",
-			configContent: testLLMConfig + `
+			configContent: testAgentConfig + `
 [server]
 addr = "${SERVER_ADDR:localhost:8080}"
 timeout = "${TIMEOUT:30s}"
@@ -169,7 +185,7 @@ enabled = true
 		},
 		{
 			name: "部分环境变量设置",
-			configContent: testLLMConfig + `
+			configContent: testAgentConfig + `
 [server]
 addr = "${SERVER_ADDR:localhost:8080}"
 timeout = "${TIMEOUT:30s}"
@@ -311,7 +327,7 @@ func Test_expandEnv(t *testing.T) {
 func TestLoader_Load_DuplicateConfig(t *testing.T) {
 	t.Run("重复的顶级配置段", func(t *testing.T) {
 		// TOML 解析器会在解析阶段检测重复的键并报错
-		configContent := testLLMConfig + `
+		configContent := testAgentConfig + `
 [server]
 addr = "localhost:8080"
 
@@ -335,7 +351,7 @@ enabled = true
 	})
 
 	t.Run("无重复的有效配置", func(t *testing.T) {
-		configContent := testLLMConfig + `
+		configContent := testAgentConfig + `
 [server]
 addr = "localhost:8080"
 timeout = "30s"
@@ -364,7 +380,7 @@ enabled = true
 // 覆盖正常获取、不存在 service、service 没有 options 等场景
 func TestLoader_GetServiceOptions(t *testing.T) {
 	t.Run("正常获取 service options", func(t *testing.T) {
-		configContent := testLLMConfig + `
+		configContent := testAgentConfig + `
 [server]
 addr = "localhost:8080"
 
@@ -378,7 +394,7 @@ timeout = "30s"
 
 [services.pagerduty]
 type = "pagerduty"
-enabled = false
+enabled = true
 
 [services.pagerduty.options]
 api_key = "test-key"
@@ -404,7 +420,7 @@ api_key = "test-key"
 	})
 
 	t.Run("不存在的 service", func(t *testing.T) {
-		configContent := testLLMConfig + `
+		configContent := testAgentConfig + `
 [server]
 addr = "localhost:8080"
 
@@ -425,7 +441,7 @@ enabled = true
 	})
 
 	t.Run("service 没有 options", func(t *testing.T) {
-		configContent := testLLMConfig + `
+		configContent := testAgentConfig + `
 [server]
 addr = "localhost:8080"
 
@@ -455,7 +471,7 @@ func TestLoader_Get(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
 
-	configContent := testLLMConfig + `
+	configContent := testAgentConfig + `
 [server]
 addr = "localhost:8080"
 
@@ -470,8 +486,8 @@ enabled = true
 
 	// Before loading, Get should return error
 	_, err = loader.Get()
-	require.NoError(t, err)
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "config not loaded")
 
 	// After loading
 	_, err = loader.Load()
@@ -487,7 +503,7 @@ enabled = true
 // 覆盖 required、hostname_port、oneof 等验证规则
 func TestLoader_Load_ValidationError(t *testing.T) {
 	t.Run("缺少必需的 server.addr", func(t *testing.T) {
-		configContent := testLLMConfig + `
+		configContent := testAgentConfig + `
 [server]
 timeout = "30s"
 
@@ -508,7 +524,7 @@ enabled = true
 	})
 
 	t.Run("无效的 hostname_port 格式", func(t *testing.T) {
-		configContent := testLLMConfig + `
+		configContent := testAgentConfig + `
 [server]
 addr = "invalid-address"
 timeout = "30s"
@@ -527,7 +543,7 @@ enabled = true
 	})
 
 	t.Run("有效的 hostname_port 格式", func(t *testing.T) {
-		configContent := testLLMConfig + `
+		configContent := testAgentConfig + `
 [server]
 addr = "localhost:8080"
 timeout = "30s"
@@ -545,7 +561,7 @@ enabled = true
 	})
 
 	t.Run("service type 不在允许的列表中", func(t *testing.T) {
-		configContent := testLLMConfig + `
+		configContent := testAgentConfig + `
 [server]
 addr = "localhost:8080"
 
@@ -563,7 +579,7 @@ enabled = true
 	})
 
 	t.Run("service 缺少 type", func(t *testing.T) {
-		configContent := testLLMConfig + `
+		configContent := testAgentConfig + `
 [server]
 addr = "localhost:8080"
 
@@ -580,7 +596,7 @@ enabled = true
 	})
 
 	t.Run("有效的 service type", func(t *testing.T) {
-		configContent := testLLMConfig + `
+		configContent := testAgentConfig + `
 [server]
 addr = "localhost:8080"
 
@@ -602,5 +618,129 @@ enabled = true
 
 		_, err := loader.Load()
 		require.NoError(t, err)
+	})
+}
+
+// TestLoader_Load_AgentValidationRules 测试 agent 验证规则
+func TestLoader_Load_AgentValidationRules(t *testing.T) {
+	baseConfig := `
+[server]
+addr = "localhost:8080"
+
+[services.prometheus]
+type = "prometheus"
+enabled = false
+`
+
+	t.Run("orchestrator 必须存在", func(t *testing.T) {
+		configContent := baseConfig + `
+[agents.service_agent]
+enabled = true
+[agents.service_agent.llm]
+provider = "openai"
+model = "gpt-4"
+`
+		configPath := createTempConfig(t, configContent)
+
+		loader := NewLoader(configPath)
+		_, err := loader.Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "orchestrator agent orchestrator is required")
+	})
+
+	t.Run("orchestrator 必须开启", func(t *testing.T) {
+		configContent := baseConfig + `
+[agents.orchestrator]
+enabled = false
+[agents.orchestrator.llm]
+provider = "openai"
+model = "gpt-4"
+
+[agents.service_agent]
+enabled = true
+[agents.service_agent.llm]
+provider = "openai"
+model = "gpt-4"
+`
+		configPath := createTempConfig(t, configContent)
+
+		loader := NewLoader(configPath)
+		_, err := loader.Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "orchestrator agent orchestrator must be enabled")
+	})
+
+	t.Run("子 agents 至少一个必须开启", func(t *testing.T) {
+		configContent := baseConfig + `
+[agents.orchestrator]
+enabled = true
+[agents.orchestrator.llm]
+provider = "openai"
+model = "gpt-4"
+
+[agents.service_agent]
+enabled = false
+[agents.service_agent.llm]
+provider = "openai"
+model = "gpt-4"
+
+[agents.prediction_agent]
+enabled = false
+[agents.prediction_agent.llm]
+provider = "openai"
+model = "gpt-4"
+
+[agents.report_agent]
+enabled = false
+[agents.report_agent.llm]
+provider = "openai"
+model = "gpt-4"
+`
+		configPath := createTempConfig(t, configContent)
+
+		loader := NewLoader(configPath)
+		_, err := loader.Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "at least one sub agent")
+	})
+
+	t.Run("验证通过且筛选 enabled agents", func(t *testing.T) {
+		configContent := baseConfig + `
+[agents.orchestrator]
+enabled = true
+[agents.orchestrator.llm]
+provider = "openai"
+model = "gpt-4"
+
+[agents.service_agent]
+enabled = true
+[agents.service_agent.llm]
+provider = "openai"
+model = "gpt-4"
+
+[agents.prediction_agent]
+enabled = false
+[agents.prediction_agent.llm]
+provider = "openai"
+model = "gpt-4"
+
+[agents.report_agent]
+enabled = true
+[agents.report_agent.llm]
+provider = "openai"
+model = "gpt-4"
+`
+		configPath := createTempConfig(t, configContent)
+
+		loader := NewLoader(configPath)
+		cfg, err := loader.Load()
+		require.NoError(t, err)
+
+		// 验证只包含 enabled 的 agents
+		assert.Contains(t, cfg.Agents, "orchestrator")
+		assert.Contains(t, cfg.Agents, "service_agent")
+		assert.Contains(t, cfg.Agents, "report_agent")
+		assert.NotContains(t, cfg.Agents, "prediction_agent")
+		assert.Equal(t, 3, len(cfg.Agents))
 	})
 }
