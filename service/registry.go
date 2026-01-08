@@ -8,9 +8,14 @@ import (
 	"github.com/oneblade/config"
 )
 
-type ServiceFactory func(opts interface{}) (Service, error)
+type ServiceMeta struct {
+	Name        string
+	Description string
+}
 
-var serviceRegistry = struct {
+type ServiceFactory func(meta ServiceMeta, opts interface{}) (Service, error)
+
+var factoryRegistry = struct {
 	mu       sync.RWMutex
 	services map[ServiceType]ServiceFactory
 }{
@@ -18,92 +23,120 @@ var serviceRegistry = struct {
 }
 
 func RegisterService(serviceType ServiceType, factory ServiceFactory) {
-	serviceRegistry.mu.Lock()
-	defer serviceRegistry.mu.Unlock()
+	factoryRegistry.mu.Lock()
+	defer factoryRegistry.mu.Unlock()
 
-	if _, exists := serviceRegistry.services[serviceType]; exists {
+	if _, exists := factoryRegistry.services[serviceType]; exists {
 		log.Printf("[service] warning: service factory for %s already registered", serviceType)
 		return
 	}
 
-	serviceRegistry.services[serviceType] = factory
+	factoryRegistry.services[serviceType] = factory
 }
 
 func getServiceFactory(serviceType ServiceType) (ServiceFactory, bool) {
-	serviceRegistry.mu.RLock()
-	defer serviceRegistry.mu.RUnlock()
+	factoryRegistry.mu.RLock()
+	defer factoryRegistry.mu.RUnlock()
 
-	factory, ok := serviceRegistry.services[serviceType]
+	factory, ok := factoryRegistry.services[serviceType]
 	return factory, ok
 }
 
 type Registry struct {
 	mu       sync.RWMutex
-	services map[ServiceType]Service
+	services map[string]Service
 }
 
 func NewRegistry() *Registry {
 	return &Registry{
-		services: make(map[ServiceType]Service),
+		services: make(map[string]Service),
 	}
 }
 
 func (r *Registry) InitFromConfig(loader *config.Loader) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	cfg := loader.Get()
-	if cfg == nil {
-		return fmt.Errorf("config not loaded")
+	cfg, err := loader.Get()
+	if err != nil {
+		return fmt.Errorf("failed to get config: %w", err)
 	}
 
+	// Note: loader.Get() already filters out disabled services
+	enabledCount := len(cfg.Services)
+	if enabledCount == 0 {
+		return nil
+	}
+
+	var (
+		initErrors  []error
+		newServices = make(map[string]Service)
+	)
+
+	// Sequential Initialization
 	for name, serviceCfg := range cfg.Services {
-		if !serviceCfg.Enabled {
-			log.Printf("[service] %s is disabled, skipping", name)
+		svc, err := r.initService(loader, name, serviceCfg)
+		if err != nil {
+			log.Printf("[service] error initializing %s: %v", name, err)
+			initErrors = append(initErrors, fmt.Errorf("service %s: %w", name, err))
 			continue
 		}
-
-		// 获取原始配置数据
-		primitive, meta, err := loader.GetServiceOptions(name)
-		if err != nil {
-			return fmt.Errorf("get options for %s: %w", name, err)
-		}
-
-		// 获取解析器
-		serviceType := ServiceType(serviceCfg.Type)
-		parser, ok := GetOptionsParser(serviceType)
-		if !ok {
-			return fmt.Errorf("no parser registered for service type: %s", serviceType)
-		}
-
-		// 统一调用解析器
-		opts, err := parser(meta, primitive)
-		if err != nil {
-			return fmt.Errorf("parse options for %s: %w", name, err)
-		}
-
-		// 创建 service
-		service, err := r.createService(serviceType, opts)
-		if err != nil {
-			return fmt.Errorf("create service %s: %w", name, err)
-		}
-
-		r.services[service.Name()] = service
+		newServices[name] = svc
 		log.Printf("[service] initialized %s", name)
+	}
+
+	// Handle results
+	successCount := len(newServices)
+	if successCount == 0 && enabledCount > 0 {
+		return fmt.Errorf("all %d enabled service(s) failed to initialize: %v", enabledCount, initErrors)
+	}
+
+	if len(initErrors) > 0 {
+		log.Printf("[service] warning: %d service(s) failed to initialize, %d succeeded", len(initErrors), successCount)
+	}
+
+	// Update registry
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for name, s := range newServices {
+		r.services[name] = s
 	}
 
 	return nil
 }
 
-func (r *Registry) createService(serviceType ServiceType, opts interface{}) (Service, error) {
-	factory, ok := getServiceFactory(serviceType)
-	if !ok {
-		return nil, fmt.Errorf("unknown service type: %s (no factory registered)", serviceType)
+// initService handles the initialization logic for a single service
+func (r *Registry) initService(loader *config.Loader, name string, serviceCfg config.ServiceConfig) (Service, error) {
+	// Get primitive options
+	primitive, meta, err := loader.GetServiceOptions(name)
+	if err != nil {
+		return nil, fmt.Errorf("get options: %w", err)
 	}
 
-	service, err := factory(opts)
+	// Get parser
+	serviceType := ServiceType(serviceCfg.Type)
+	parser, ok := GetOptionsParser(serviceType)
+	if !ok {
+		return nil, fmt.Errorf("no parser registered for type %s", serviceType)
+	}
+
+	// Parse options
+	opts, err := parser(meta, primitive)
 	if err != nil {
-		return nil, fmt.Errorf("create service %s: %w", serviceType, err)
+		return nil, fmt.Errorf("parse options: %w", err)
+	}
+
+	// Create service
+	serviceMeta := ServiceMeta{
+		Name:        name,
+		Description: serviceCfg.Description,
+	}
+
+	factory, ok := getServiceFactory(serviceType)
+	if !ok {
+		return nil, fmt.Errorf("unknown service type %s", serviceType)
+	}
+
+	service, err := factory(serviceMeta, opts)
+	if err != nil {
+		return nil, fmt.Errorf("create service: %w", err)
 	}
 
 	return service, nil
@@ -134,7 +167,7 @@ func (r *Registry) Close() error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("errors: %v", errs)
+		return fmt.Errorf("close errors: %v", errs)
 	}
 	return nil
 }

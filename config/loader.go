@@ -18,22 +18,20 @@ type Loader struct {
 }
 
 // NewLoader 创建配置加载器
-// configPath: 配置文件路径 (如 "./config.toml")
-func NewLoader(configPath string) (*Loader, error) {
+func NewLoader(configPath string) *Loader {
 	loader := &Loader{
 		configPath:  configPath,
 		validator:   validator.New(),
 		serviceMeta: make(map[string]*toml.MetaData),
 	}
-	return loader, nil
+	return loader
 }
 
 // extractServiceMeta 提取每个 service 的元数据
 func (l *Loader) extractServiceMeta(meta *toml.MetaData, cfg *Config) {
 	// 为每个 service 保存元数据副本
 	for name := range cfg.Services {
-		metaCopy := *meta
-		l.serviceMeta[name] = &metaCopy
+		l.serviceMeta[name] = meta
 	}
 }
 
@@ -52,16 +50,43 @@ func (l *Loader) Load() (*Config, error) {
 		return nil, fmt.Errorf("parse config file %s: %w", l.configPath, err)
 	}
 
-	// 验证配置
+	// strict mode check for unknown keys
+	if err := l.checkUnknownKeys(&meta); err != nil {
+		return nil, err
+	}
+
+	// 验证配置结构
 	if err := l.validate(&cfg); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
+
+	// 筛选 enabled agents 和 services
+	l.filterEnabledAgents(&cfg)
+	l.filterEnabledServices(&cfg)
 
 	// 提取 service 元数据
 	l.extractServiceMeta(&meta, &cfg)
 
 	l.config = &cfg
 	return &cfg, nil
+}
+
+// checkUnknownKeys checks for undecoded keys in the config
+func (l *Loader) checkUnknownKeys(meta *toml.MetaData) error {
+	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
+		var unknown []toml.Key
+		for _, k := range undecoded {
+			// Ignore [services.<name>.options] as they are delayed parsed
+			if len(k) >= 3 && k[0] == "services" && k[2] == "options" {
+				continue
+			}
+			unknown = append(unknown, k)
+		}
+		if len(unknown) > 0 {
+			return fmt.Errorf("parse config file %s: unknown keys: %v", l.configPath, unknown)
+		}
+	}
+	return nil
 }
 
 // loadAndExpand 读取文件并展开环境变量
@@ -107,9 +132,34 @@ func (l *Loader) validate(cfg *Config) error {
 	return l.validator.Struct(cfg)
 }
 
+// filterEnabledAgents 筛选出 enabled 的 agents
+func (l *Loader) filterEnabledAgents(cfg *Config) {
+	enabledAgents := make(map[string]AgentConfig)
+	for name, agent := range cfg.Agents {
+		if agent.Enabled {
+			enabledAgents[name] = agent
+		}
+	}
+	cfg.Agents = enabledAgents
+}
+
+// filterEnabledServices 筛选出 enabled 的 services
+func (l *Loader) filterEnabledServices(cfg *Config) {
+	enabledServices := make(map[string]ServiceConfig)
+	for name, service := range cfg.Services {
+		if service.Enabled {
+			enabledServices[name] = service
+		}
+	}
+	cfg.Services = enabledServices
+}
+
 // Get 获取当前配置
-func (l *Loader) Get() *Config {
-	return l.config
+func (l *Loader) Get() (*Config, error) {
+	if l.config == nil {
+		return nil, fmt.Errorf("config not loaded")
+	}
+	return l.config, nil
 }
 
 // ConfigPath 获取配置文件路径
@@ -121,20 +171,17 @@ func (l *Loader) ConfigPath() string {
 func (l *Loader) GetServiceOptions(serviceName string) (toml.Primitive, *toml.MetaData, error) {
 	cfg := l.config
 	if cfg == nil {
-		var zero toml.Primitive
-		return zero, nil, fmt.Errorf("config not loaded")
+		return toml.Primitive{}, nil, fmt.Errorf("config not loaded")
 	}
 
 	serviceCfg, ok := cfg.Services[serviceName]
 	if !ok {
-		var zero toml.Primitive
-		return zero, nil, fmt.Errorf("service %s not found", serviceName)
+		return toml.Primitive{}, nil, fmt.Errorf("service %s not found", serviceName)
 	}
 
 	meta := l.serviceMeta[serviceName]
 	if meta == nil {
-		var zero toml.Primitive
-		return zero, nil, fmt.Errorf("no metadata for service %s", serviceName)
+		return toml.Primitive{}, nil, fmt.Errorf("no metadata for service %s", serviceName)
 	}
 
 	return serviceCfg.Options, meta, nil

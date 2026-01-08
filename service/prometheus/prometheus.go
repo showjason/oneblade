@@ -3,6 +3,7 @@ package prometheus
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -17,12 +18,12 @@ func init() {
 		return service.ParseOptions[Options](meta, primitive, service.Prometheus)
 	})
 
-	service.RegisterService(service.Prometheus, func(opts interface{}) (service.Service, error) {
+	service.RegisterService(service.Prometheus, func(meta service.ServiceMeta, opts interface{}) (service.Service, error) {
 		promOpts, ok := opts.(*Options)
 		if !ok {
 			return nil, fmt.Errorf("invalid prometheus options type, got %T", opts)
 		}
-		return NewService(promOpts)
+		return NewService(meta, promOpts)
 	})
 }
 
@@ -32,32 +33,40 @@ type Options struct {
 }
 
 type Service struct {
-	address string
-	timeout time.Duration
-	client  api.Client
-	api     v1.API
+	name        string
+	description string
+	address     string
+	timeout     time.Duration
+	client      api.Client
+	api         v1.API
 }
 
-func NewService(opts *Options) (*Service, error) {
+func NewService(meta service.ServiceMeta, opts *Options) (*Service, error) {
 	client, err := api.NewClient(api.Config{Address: opts.Address})
 	if err != nil {
 		return nil, fmt.Errorf("create prometheus client: %w", err)
 	}
 
 	return &Service{
-		address: opts.Address,
-		timeout: opts.Timeout,
-		client:  client,
-		api:     v1.NewAPI(client),
+		name:        meta.Name,
+		description: meta.Description,
+		address:     opts.Address,
+		timeout:     opts.Timeout,
+		client:      client,
+		api:         v1.NewAPI(client),
 	}, nil
 }
 
-func (s *Service) Name() service.ServiceType {
-	return service.Prometheus
+func (s *Service) Name() string {
+	return s.name
 }
 
 func (s *Service) Description() string {
-	return "Query metrics from Prometheus. Support query_range (metrics over time) and query_instant (metrics at single point)."
+	return s.description
+}
+
+func (s *Service) Type() service.ServiceType {
+	return service.Prometheus
 }
 
 // === Request/Response Structures ===
@@ -100,7 +109,8 @@ type QueryInstantParams struct {
 // === Logic ===
 
 func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
-	// 使用配置的超时时间，如果未配置则使用默认值 30 秒
+	log.Printf("[prometheus] Handle called with operation: %s", req.Operation)
+
 	timeout := s.timeout
 	if timeout == 0 {
 		timeout = 60 * time.Second
@@ -112,15 +122,18 @@ func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
 	switch req.Operation {
 	case QueryRange:
 		if req.QueryRange == nil {
+			log.Printf("[prometheus] Handle: query_range params is nil, returning error")
 			return Response{Success: false, Message: "missing query_range params"}, nil
 		}
 		return s.queryRange(ctx, req.QueryRange)
 	case QueryInstant:
 		if req.QueryInstant == nil {
+			log.Printf("[prometheus] Handle: query_instant params is nil, returning error")
 			return Response{Success: false, Message: "missing query_instant params"}, nil
 		}
 		return s.queryInstant(ctx, req.QueryInstant)
 	default:
+		log.Printf("[prometheus] Handle: unknown operation %s", req.Operation)
 		return Response{Success: false, Message: fmt.Sprintf("unknown operation: %s", req.Operation)}, nil
 	}
 }
@@ -134,12 +147,16 @@ func (s *Service) AsTool() (tools.Tool, error) {
 }
 
 func (s *Service) Health(ctx context.Context) error {
+	log.Printf("[prometheus] Health check started")
+
 	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	_, err := s.api.Config(healthCtx)
 	if err != nil {
+		log.Printf("[prometheus] Health check failed: %v", err)
 		return fmt.Errorf("prometheus health check failed: %w", err)
 	}
+	log.Printf("[prometheus] Health check succeeded")
 	return nil
 }
 
@@ -150,13 +167,17 @@ func (s *Service) Close() error {
 // === Implementations ===
 
 func (s *Service) queryRange(ctx context.Context, params *QueryRangeParams) (Response, error) {
+	log.Printf("[prometheus] queryRange called with promql=%s, start_time=%s, end_time=%s, step=%s", params.PromQL, params.StartTime, params.EndTime, params.Step)
+
 	start, err := time.Parse(time.RFC3339, params.StartTime)
 	if err != nil {
+		log.Printf("[prometheus] queryRange failed to parse start_time: %v", err)
 		return Response{Success: false, Message: fmt.Sprintf("parse start_time: %v", err)}, nil
 	}
 
 	end, err := time.Parse(time.RFC3339, params.EndTime)
 	if err != nil {
+		log.Printf("[prometheus] queryRange failed to parse end_time: %v", err)
 		return Response{Success: false, Message: fmt.Sprintf("parse end_time: %v", err)}, nil
 	}
 
@@ -164,6 +185,7 @@ func (s *Service) queryRange(ctx context.Context, params *QueryRangeParams) (Res
 	if params.Step != "" {
 		step, err = time.ParseDuration(params.Step)
 		if err != nil {
+			log.Printf("[prometheus] queryRange failed to parse step: %v", err)
 			return Response{Success: false, Message: fmt.Sprintf("parse step: %v", err)}, nil
 		}
 	}
@@ -174,8 +196,10 @@ func (s *Service) queryRange(ctx context.Context, params *QueryRangeParams) (Res
 		Step:  step,
 	})
 	if err != nil {
+		log.Printf("[prometheus] queryRange failed: %v", err)
 		return Response{Success: false, Message: err.Error()}, nil
 	}
+	log.Printf("[prometheus] queryRange succeeded with %d warnings", len(warnings))
 
 	return Response{
 		Operation: QueryRange,
@@ -186,19 +210,24 @@ func (s *Service) queryRange(ctx context.Context, params *QueryRangeParams) (Res
 }
 
 func (s *Service) queryInstant(ctx context.Context, params *QueryInstantParams) (Response, error) {
+	log.Printf("[prometheus] queryInstant called with promql=%s, time=%s", params.PromQL, params.Time)
+
 	ts := time.Now()
 	if params.Time != "" {
 		var err error
 		ts, err = time.Parse(time.RFC3339, params.Time)
 		if err != nil {
+			log.Printf("[prometheus] queryInstant failed to parse time: %v", err)
 			return Response{Success: false, Message: fmt.Sprintf("parse time: %v", err)}, nil
 		}
 	}
 
 	result, warnings, err := s.api.Query(ctx, params.PromQL, ts)
 	if err != nil {
+		log.Printf("[prometheus] queryInstant failed: %v", err)
 		return Response{Success: false, Message: err.Error()}, nil
 	}
+	log.Printf("[prometheus] queryInstant succeeded with %d warnings", len(warnings))
 
 	return Response{
 		Operation: QueryInstant,

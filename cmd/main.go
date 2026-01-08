@@ -4,16 +4,13 @@ import (
 	"context"
 	"flag"
 	"log"
-	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/go-kratos/blades"
-	"github.com/go-kratos/blades/contrib/openai"
 
-	"github.com/oneblade/agent"
-	"github.com/oneblade/config"
-	"github.com/oneblade/service"
+	"github.com/oneblade/internal/app"
 
 	// registry imports services to register init functions
 	_ "github.com/oneblade/service/opensearch"
@@ -22,66 +19,51 @@ import (
 )
 
 func main() {
-	// 解析命令行参数
+	// 1. 解析命令行参数
 	configPath := flag.String("config", "./config.toml", "配置文件路径")
 	flag.Parse()
 
-	// 使用 signal.NotifyContext 创建可被信号取消的 context
+	// 2. 创建 context（支持信号中断）
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// 加载配置
-	loader, err := config.NewLoader(*configPath)
+	// 3. 构建应用
+	application, err := app.NewApplication(*configPath)
 	if err != nil {
-		log.Fatalf("failed to create config loader: %v", err)
+		log.Printf("failed to create application: %v", err)
+		return
 	}
 
-	_, err = loader.Load()
-	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+	// 4. 设置优雅关闭
+	defer func() {
+		log.Println("[main] shutting down...")
+		if err := application.ShutdownWithTimeout(5 * time.Second); err != nil {
+			log.Printf("shutdown error: %v", err)
+		}
+	}()
+
+	// 5. 初始化应用
+	if err := application.Initialize(ctx); err != nil {
+		log.Printf("failed to initialize application: %v", err)
+		return
 	}
 
-	log.Printf("[main] loaded config from: %s", *configPath)
+	log.Printf("[main] application initialized, config loaded from: %s", *configPath)
 
-	// 初始化 LLM Model（仍然从环境变量读取，因为是敏感信息）
-	model := openai.NewModel(os.Getenv("OPENAI_MODEL"), openai.Config{
-		APIKey: os.Getenv("OPENAI_API_KEY"),
-	})
-
-	// 初始化 Service Registry
-	registry := service.NewRegistry()
-	if err := registry.InitFromConfig(loader); err != nil {
-		log.Fatalf("failed to init services: %v", err)
-	}
-	defer registry.Close()
-
-	// 创建 Orchestrator Agent
-	orchestrator, err := agent.NewOrchestratorAgent(agent.OrchestratorConfig{
-		Model:    model,
-		Services: registry.All(),
-	})
-	if err != nil {
-		log.Fatalf("failed to create orchestrator agent: %v", err)
-	}
-
-	// 创建 Runner
-	runner := agent.NewInspectionRunner(orchestrator)
-
-	// 执行巡检
+	// 6. 执行巡检
 	input := blades.UserMessage("请对过去24小时的系统状态进行全面巡检，生成巡检报告")
 
-	output, err := runner.Run(ctx, input)
+	output, err := application.Run(ctx, input)
 	if err != nil {
 		// 检查是否是被中断
 		if ctx.Err() != nil {
 			log.Printf("[main] inspection interrupted: %v", ctx.Err())
 		} else {
-			log.Fatalf("failed to run inspection: %v", err)
+			log.Printf("failed to run inspection: %v", err)
 		}
-	} else {
-		log.Println("巡检报告:")
-		log.Println(output.Text())
+		return
 	}
 
-	log.Println("[main] shutting down...")
+	log.Println("巡检报告:")
+	log.Println(output.Text())
 }

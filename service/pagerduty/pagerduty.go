@@ -3,6 +3,7 @@ package pagerduty
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -16,37 +17,50 @@ func init() {
 		return service.ParseOptions[Options](meta, primitive, service.PagerDuty)
 	})
 
-	service.RegisterService(service.PagerDuty, func(opts interface{}) (service.Service, error) {
+	service.RegisterService(service.PagerDuty, func(meta service.ServiceMeta, opts interface{}) (service.Service, error) {
 		pdOpts, ok := opts.(*Options)
 		if !ok {
 			return nil, fmt.Errorf("invalid pagerduty options type, got %T", opts)
 		}
-		return NewService(pdOpts), nil
+		return NewService(meta, pdOpts), nil
 	})
 }
 
 type Options struct {
 	APIKey string `toml:"api_key" validate:"required"`
+	From   string `toml:"from"` // 可选：执行操作的用户 email，用于 PagerDuty API 的 From header
 }
 
 type Service struct {
-	apiKey string
-	client *pagerduty.Client
+	name        string
+	description string
+	apiKey      string
+	from        string // 执行操作的用户 email
+	client      *pagerduty.Client
 }
 
-func NewService(opts *Options) *Service {
+func NewService(meta service.ServiceMeta, opts *Options) *Service {
+	// From 字段用于 PagerDuty API 的 From header，标识执行操作的用户 email
+	// 如果未配置，留空字符串，PagerDuty 可能会使用 API key 关联的用户
 	return &Service{
-		apiKey: opts.APIKey,
-		client: pagerduty.NewClient(opts.APIKey),
+		name:        meta.Name,
+		description: meta.Description,
+		apiKey:      opts.APIKey,
+		from:        opts.From,
+		client:      pagerduty.NewClient(opts.APIKey),
 	}
 }
 
-func (s *Service) Name() service.ServiceType {
-	return service.PagerDuty
+func (s *Service) Name() string {
+	return s.name
 }
 
 func (s *Service) Description() string {
-	return "Manage PagerDuty incidents and alerts. Capabilities: list, acknowledge, resolve, snooze, and get details."
+	return s.description
+}
+
+func (s *Service) Type() service.ServiceType {
+	return service.PagerDuty
 }
 
 // === Request/Response Structures ===
@@ -83,11 +97,12 @@ type Response struct {
 // === Params ===
 
 type ListIncidentsParams struct {
-	Since      string   `json:"since" jsonschema:"Start time in RFC3339 format"`
-	Until      string   `json:"until" jsonschema:"End time in RFC3339 format"`
-	ServiceIDs []string `json:"service_ids,omitempty" jsonschema:"Filter by service IDs"`
-	Statuses   []string `json:"statuses,omitempty" jsonschema:"Filter by statuses: triggered, acknowledged, resolved"`
-	Limit      int      `json:"limit,omitempty"`
+	Since        string   `json:"since,omitempty" jsonschema:"Start time in RFC3339 format, defaults to 24 hours ago if not provided"`
+	Until        string   `json:"until,omitempty" jsonschema:"End time in RFC3339 format, defaults to now if not provided"`
+	ServiceIDs   []string `json:"service_ids,omitempty" jsonschema:"Filter by service IDs"`
+	ServiceNames []string `json:"service_names,omitempty" jsonschema:"Filter by service names (will be converted to service IDs)"`
+	Statuses     []string `json:"statuses,omitempty" jsonschema:"Filter by statuses: triggered, acknowledged, resolved"`
+	Limit        int      `json:"limit,omitempty"`
 }
 
 type SnoozeAlertParams struct {
@@ -114,6 +129,7 @@ type Incident struct {
 	Status      string `json:"status"`
 	Urgency     string `json:"urgency"`
 	ServiceName string `json:"service_name"`
+	ServiceID   string `json:"service_id"`
 	CreatedAt   string `json:"created_at"`
 	HTMLURL     string `json:"html_url"`
 }
@@ -121,31 +137,43 @@ type Incident struct {
 // === Logic ===
 
 func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
+	// 添加日志以追踪工具调用
+	log.Printf("[pagerduty] Handle called with operation: %s", req.Operation)
+
 	switch req.Operation {
 	case ListIncidents:
 		if req.ListIncidents == nil {
+			log.Printf("[pagerduty] Handle: list_incidents params is nil, returning error")
 			return Response{Success: false, Message: "missing list_incidents params"}, nil
 		}
 		return s.listIncidents(ctx, req.ListIncidents)
 	case SnoozeAlert:
 		if req.SnoozeAlert == nil {
+			log.Printf("[pagerduty] Handle: snooze_alert params is nil, returning error")
 			return Response{Success: false, Message: "missing snooze_alert params"}, nil
 		}
+		log.Printf("[pagerduty] Handle: snooze_alert params present, calling snoozeAlert")
 		return s.snoozeAlert(ctx, req.SnoozeAlert)
 	case AcknowledgeIncident:
 		if req.AcknowledgeIncident == nil {
+			log.Printf("[pagerduty] Handle: acknowledge_incident params is nil, returning error")
 			return Response{Success: false, Message: "missing acknowledge_incident params"}, nil
 		}
+		log.Printf("[pagerduty] Handle: acknowledge_incident params present, calling acknowledgeIncident")
 		return s.acknowledgeIncident(ctx, req.AcknowledgeIncident)
 	case ResolveIncident:
 		if req.ResolveIncident == nil {
+			log.Printf("[pagerduty] Handle: resolve_incident params is nil, returning error")
 			return Response{Success: false, Message: "missing resolve_incident params"}, nil
 		}
+		log.Printf("[pagerduty] Handle: resolve_incident params present, calling resolveIncident")
 		return s.resolveIncident(ctx, req.ResolveIncident)
 	case GetIncident:
 		if req.GetIncident == nil {
+			log.Printf("[pagerduty] Handle: get_incident params is nil, returning error")
 			return Response{Success: false, Message: "missing get_incident params"}, nil
 		}
+		log.Printf("[pagerduty] Handle: get_incident params present, calling getIncident")
 		return s.getIncident(ctx, req.GetIncident)
 	default:
 		return Response{Success: false, Message: fmt.Sprintf("unknown operation: %s", req.Operation)}, nil
@@ -177,18 +205,54 @@ func (s *Service) Close() error {
 // === Implementations ===
 
 func (s *Service) listIncidents(ctx context.Context, params *ListIncidentsParams) (Response, error) {
+	log.Printf("[pagerduty] listIncidents called with params: limit=%d, statuses=%v, service_ids=%v", params.Limit, params.Statuses, params.ServiceIDs)
+
 	limit := params.Limit
 	if limit == 0 {
 		limit = 50
 	}
 
+	// 如果 since 和 until 未提供，使用默认值（过去24小时）
+	since := params.Since
+	until := params.Until
+	if since == "" || until == "" {
+		now := time.Now()
+		if until == "" {
+			until = now.Format(time.RFC3339)
+		}
+		if since == "" {
+			since = now.Add(-24 * time.Hour).Format(time.RFC3339)
+		}
+	}
+
+	// 如果提供了 ServiceNames，先转换为 ServiceIDs
+	serviceIDs := params.ServiceIDs
+	if len(params.ServiceNames) > 0 {
+		nameToIDs, err := s.resolveServiceNamesToIDs(ctx, params.ServiceNames)
+		if err != nil {
+			return Response{Success: false, Message: fmt.Sprintf("failed to resolve service names: %v", err)}, nil
+		}
+		// 合并 ServiceIDs 和从 ServiceNames 解析出的 IDs（去重）
+		serviceIDMap := make(map[string]bool)
+		for _, id := range serviceIDs {
+			serviceIDMap[id] = true
+		}
+		for _, id := range nameToIDs {
+			serviceIDMap[id] = true
+		}
+		serviceIDs = make([]string, 0, len(serviceIDMap))
+		for id := range serviceIDMap {
+			serviceIDs = append(serviceIDs, id)
+		}
+	}
+
 	opts := pagerduty.ListIncidentsOptions{
-		Since: params.Since,
-		Until: params.Until,
+		Since: since,
+		Until: until,
 		Limit: uint(limit),
 	}
-	if len(params.ServiceIDs) > 0 {
-		opts.ServiceIDs = params.ServiceIDs
+	if len(serviceIDs) > 0 {
+		opts.ServiceIDs = serviceIDs
 	}
 	if len(params.Statuses) > 0 {
 		opts.Statuses = params.Statuses
@@ -196,7 +260,18 @@ func (s *Service) listIncidents(ctx context.Context, params *ListIncidentsParams
 
 	resp, err := s.client.ListIncidentsWithContext(ctx, opts)
 	if err != nil {
+		log.Printf("[pagerduty] listIncidents failed: %v", err)
 		return Response{Success: false, Message: err.Error()}, nil
+	}
+	log.Printf("[pagerduty] listIncidents succeeded, found %d incidents", len(resp.Incidents))
+
+	if len(resp.Incidents) == 0 {
+		return Response{
+			Operation: ListIncidents,
+			Success:   true,
+			Incidents: []Incident{},
+			Total:     0,
+		}, nil
 	}
 
 	incidents := make([]Incident, len(resp.Incidents))
@@ -207,6 +282,7 @@ func (s *Service) listIncidents(ctx context.Context, params *ListIncidentsParams
 			Status:      inc.Status,
 			Urgency:     inc.Urgency,
 			ServiceName: inc.Service.Summary,
+			ServiceID:   inc.Service.ID,
 			CreatedAt:   inc.CreatedAt,
 			HTMLURL:     inc.HTMLURL,
 		}
@@ -220,22 +296,51 @@ func (s *Service) listIncidents(ctx context.Context, params *ListIncidentsParams
 	}, nil
 }
 
+// resolveServiceNamesToIDs 根据 service name 列表查询对应的 service ID 列表
+func (s *Service) resolveServiceNamesToIDs(ctx context.Context, serviceNames []string) ([]string, error) {
+	log.Printf("[pagerduty] resolveServiceNamesToIDs called with service_names=%v", serviceNames)
+
+	servicesResp, err := s.client.ListServicesWithContext(ctx, pagerduty.ListServiceOptions{})
+	if err != nil {
+		log.Printf("[pagerduty] resolveServiceNamesToIDs failed to list services: %v", err)
+		return nil, fmt.Errorf("list services: %w", err)
+	}
+
+	// 创建 name -> ID 的映射
+	nameToID := make(map[string]string)
+	for _, svc := range servicesResp.Services {
+		nameToID[svc.Name] = svc.ID
+	}
+
+	// 根据 serviceNames 查找对应的 IDs
+	var serviceIDs []string
+	var notFound []string
+	for _, name := range serviceNames {
+		if id, ok := nameToID[name]; ok {
+			serviceIDs = append(serviceIDs, id)
+		} else {
+			notFound = append(notFound, name)
+		}
+	}
+
+	if len(notFound) > 0 {
+		return serviceIDs, fmt.Errorf("service names not found: %v", notFound)
+	}
+
+	return serviceIDs, nil
+}
+
 func (s *Service) snoozeAlert(ctx context.Context, params *SnoozeAlertParams) (Response, error) {
-	// PagerDuty Go SDK SnoozeIncident method usually takes ID and duration in seconds
-	// Check sdk docs or assume similar to existing capable logic.
-	// Since original code didn't implement snooze, I'll implement best effort.
-	// client.SnoozeIncident(id, durationSeconds)
+	log.Printf("[pagerduty] snoozeAlert called with incident_id=%s, duration=%d minutes", params.IncidentID, params.Duration)
 
 	durationSec := uint(params.Duration * 60)
-	// Note: checking signature of SnoozeIncident in generic thought or assuming it exists.
-	// If it doesn't exist, I might fail build.
-	// Let's assume standard PagerDuty V2 API behavior.
-	// Actually, the go-pagerduty library usually has `SnoozeIncidentWithContext`.
 
 	inc, err := s.client.SnoozeIncidentWithContext(ctx, params.IncidentID, durationSec)
 	if err != nil {
+		log.Printf("[pagerduty] snoozeAlert failed: %v", err)
 		return Response{Success: false, Message: err.Error()}, nil
 	}
+	log.Printf("[pagerduty] snoozeAlert succeeded for incident %s", params.IncidentID)
 
 	// Assuming inc has PendingActions or similar if we want snooze_until.
 	// Or we can just calculate it for response.
@@ -254,8 +359,9 @@ func (s *Service) snoozeAlert(ctx context.Context, params *SnoozeAlertParams) (R
 }
 
 func (s *Service) acknowledgeIncident(ctx context.Context, params *AcknowledgeIncidentParams) (Response, error) {
-	// Manage incidents takes a list of Reference objects
-	_, err := s.client.ManageIncidentsWithContext(ctx, s.apiKey, []pagerduty.ManageIncidentsOptions{
+	log.Printf("[pagerduty] acknowledgeIncident called with incident_id=%s", params.IncidentID)
+
+	_, err := s.client.ManageIncidentsWithContext(ctx, s.from, []pagerduty.ManageIncidentsOptions{
 		{
 			ID:     params.IncidentID,
 			Status: "acknowledged",
@@ -263,8 +369,10 @@ func (s *Service) acknowledgeIncident(ctx context.Context, params *AcknowledgeIn
 	})
 
 	if err != nil {
+		log.Printf("[pagerduty] acknowledgeIncident failed: %v", err)
 		return Response{Success: false, Message: err.Error()}, nil
 	}
+	log.Printf("[pagerduty] acknowledgeIncident succeeded for incident %s", params.IncidentID)
 
 	return Response{
 		Operation: AcknowledgeIncident,
@@ -274,7 +382,9 @@ func (s *Service) acknowledgeIncident(ctx context.Context, params *AcknowledgeIn
 }
 
 func (s *Service) resolveIncident(ctx context.Context, params *ResolveIncidentParams) (Response, error) {
-	_, err := s.client.ManageIncidentsWithContext(ctx, s.apiKey, []pagerduty.ManageIncidentsOptions{
+	log.Printf("[pagerduty] resolveIncident called with incident_id=%s", params.IncidentID)
+
+	_, err := s.client.ManageIncidentsWithContext(ctx, s.from, []pagerduty.ManageIncidentsOptions{
 		{
 			ID:     params.IncidentID,
 			Status: "resolved",
@@ -282,8 +392,10 @@ func (s *Service) resolveIncident(ctx context.Context, params *ResolveIncidentPa
 	})
 
 	if err != nil {
+		log.Printf("[pagerduty] resolveIncident failed: %v", err)
 		return Response{Success: false, Message: err.Error()}, nil
 	}
+	log.Printf("[pagerduty] resolveIncident succeeded for incident %s", params.IncidentID)
 
 	return Response{
 		Operation: ResolveIncident,
@@ -293,10 +405,14 @@ func (s *Service) resolveIncident(ctx context.Context, params *ResolveIncidentPa
 }
 
 func (s *Service) getIncident(ctx context.Context, params *GetIncidentParams) (Response, error) {
+	log.Printf("[pagerduty] getIncident called with incident_id=%s", params.IncidentID)
+
 	inc, err := s.client.GetIncidentWithContext(ctx, params.IncidentID)
 	if err != nil {
+		log.Printf("[pagerduty] getIncident failed: %v", err)
 		return Response{Success: false, Message: err.Error()}, nil
 	}
+	log.Printf("[pagerduty] getIncident succeeded for incident %s", params.IncidentID)
 
 	return Response{
 		Operation: GetIncident,

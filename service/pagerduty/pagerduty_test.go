@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"testing"
+
+	"github.com/oneblade/service"
 )
 
 func TestService_Name(t *testing.T) {
@@ -14,7 +16,8 @@ func TestService_Name(t *testing.T) {
 	}
 
 	opts := &Options{APIKey: apiKey}
-	svc := NewService(opts)
+	meta := service.ServiceMeta{Name: "pagerduty"}
+	svc := NewService(meta, opts)
 
 	if svc.Name() != "pagerduty" {
 		t.Errorf("expected pagerduty, got %s", svc.Name())
@@ -22,7 +25,8 @@ func TestService_Name(t *testing.T) {
 }
 
 func TestService_AsTool(t *testing.T) {
-	svc := NewService(&Options{APIKey: "dummy"})
+	meta := service.ServiceMeta{Name: "pagerduty"}
+	svc := NewService(meta, &Options{APIKey: "dummy"})
 	_, err := svc.AsTool()
 	if err != nil {
 		t.Fatalf("AsTool failed: %v", err)
@@ -38,7 +42,8 @@ func TestService_Handle_ListIncidents_Mock(t *testing.T) {
 	// For this task, we assume integration testing or basic structural validation.
 	// This test just serves as a placeholder for where robust tests would go.
 
-	svc := NewService(&Options{APIKey: "dummy"})
+	meta := service.ServiceMeta{Name: "pagerduty"}
+	svc := NewService(meta, &Options{APIKey: "dummy"})
 	req := Request{
 		Operation: ListIncidents,
 		ListIncidents: &ListIncidentsParams{

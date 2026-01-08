@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -19,12 +20,12 @@ func init() {
 		return service.ParseOptions[Options](meta, primitive, service.OpenSearch)
 	})
 
-	service.RegisterService(service.OpenSearch, func(opts interface{}) (service.Service, error) {
+	service.RegisterService(service.OpenSearch, func(meta service.ServiceMeta, opts interface{}) (service.Service, error) {
 		osOpts, ok := opts.(*Options)
 		if !ok {
 			return nil, fmt.Errorf("invalid opensearch options type, got %T", opts)
 		}
-		return NewService(osOpts)
+		return NewService(meta, osOpts)
 	})
 }
 
@@ -36,14 +37,16 @@ type Options struct {
 }
 
 type Service struct {
-	addresses []string
-	username  string
-	password  string
-	index     string
-	client    *opensearch.Client
+	name        string
+	description string
+	addresses   []string
+	username    string
+	password    string
+	index       string
+	client      *opensearch.Client
 }
 
-func NewService(opts *Options) (*Service, error) {
+func NewService(meta service.ServiceMeta, opts *Options) (*Service, error) {
 	client, err := opensearch.NewClient(opensearch.Config{
 		Addresses: opts.Addresses,
 		Username:  opts.Username,
@@ -54,20 +57,26 @@ func NewService(opts *Options) (*Service, error) {
 	}
 
 	return &Service{
-		addresses: opts.Addresses,
-		username:  opts.Username,
-		password:  opts.Password,
-		index:     opts.Index,
-		client:    client,
+		name:        meta.Name,
+		description: meta.Description,
+		addresses:   opts.Addresses,
+		username:    opts.Username,
+		password:    opts.Password,
+		index:       opts.Index,
+		client:      client,
 	}, nil
 }
 
-func (s *Service) Name() service.ServiceType {
-	return service.OpenSearch
+func (s *Service) Name() string {
+	return s.name
 }
 
 func (s *Service) Description() string {
-	return "Execute DSL queries against OpenSearch. Operation 'search' allows full JSON body queries."
+	return s.description
+}
+
+func (s *Service) Type() service.ServiceType {
+	return service.OpenSearch
 }
 
 // === Request/Response Structures ===
@@ -100,13 +109,17 @@ type SearchParams struct {
 // === Logic ===
 
 func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
+	log.Printf("[opensearch] Handle called with operation: %s", req.Operation)
+
 	switch req.Operation {
 	case Search:
 		if req.Search == nil {
+			log.Printf("[opensearch] Handle: search params is nil, returning error")
 			return Response{Success: false, Message: "missing search params"}, nil
 		}
 		return s.search(ctx, req.Search)
 	default:
+		log.Printf("[opensearch] Handle: unknown operation %s", req.Operation)
 		return Response{Success: false, Message: fmt.Sprintf("unknown operation: %s", req.Operation)}, nil
 	}
 }
@@ -120,19 +133,24 @@ func (s *Service) AsTool() (tools.Tool, error) {
 }
 
 func (s *Service) Health(ctx context.Context) error {
+	log.Printf("[opensearch] Health check started")
+
 	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	req := opensearchapi.PingRequest{}
 	res, err := req.Do(healthCtx, s.client)
 	if err != nil {
+		log.Printf("[opensearch] Health check failed: %v", err)
 		return err
 	}
 	defer res.Body.Close()
 
 	if res.IsError() {
+		log.Printf("[opensearch] Health check failed with status: %s", res.Status())
 		return fmt.Errorf("opensearch health check failed: %s", res.Status())
 	}
+	log.Printf("[opensearch] Health check succeeded")
 	return nil
 }
 
@@ -147,8 +165,10 @@ func (s *Service) search(ctx context.Context, params *SearchParams) (Response, e
 	if index == "" {
 		index = s.index
 	}
+	log.Printf("[opensearch] search called with index=%s, body_length=%d", index, len(params.Body))
 
 	if len(params.Body) == 0 {
+		log.Printf("[opensearch] search failed: body is empty")
 		return Response{Success: false, Message: "body is required for opensearch query"}, nil
 	}
 
@@ -159,18 +179,22 @@ func (s *Service) search(ctx context.Context, params *SearchParams) (Response, e
 
 	res, err := req.Do(ctx, s.client)
 	if err != nil {
+		log.Printf("[opensearch] search failed: %v", err)
 		return Response{Success: false, Message: fmt.Sprintf("opensearch search: %v", err)}, nil
 	}
 	defer res.Body.Close()
 
 	if res.IsError() {
+		log.Printf("[opensearch] search failed with status: %s", res.Status())
 		return Response{Success: false, Message: fmt.Sprintf("opensearch error: %s", res.String())}, nil
 	}
 
 	var result map[string]interface{}
 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
+		log.Printf("[opensearch] search failed to decode response: %v", err)
 		return Response{Success: false, Message: fmt.Sprintf("decode response: %v", err)}, nil
 	}
+	log.Printf("[opensearch] search succeeded")
 
 	return Response{
 		Operation: Search,
