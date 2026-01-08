@@ -31,9 +31,7 @@ func NewLoader(configPath string) *Loader {
 func (l *Loader) extractServiceMeta(meta *toml.MetaData, cfg *Config) {
 	// 为每个 service 保存元数据副本
 	for name := range cfg.Services {
-		if metaCopy := *meta; true {
-			l.serviceMeta[name] = &metaCopy
-		}
+		l.serviceMeta[name] = meta
 	}
 }
 
@@ -173,20 +171,17 @@ func (l *Loader) ConfigPath() string {
 func (l *Loader) GetServiceOptions(serviceName string) (toml.Primitive, *toml.MetaData, error) {
 	cfg := l.config
 	if cfg == nil {
-		var zero toml.Primitive
-		return zero, nil, fmt.Errorf("config not loaded")
+		return toml.Primitive{}, nil, fmt.Errorf("config not loaded")
 	}
 
 	serviceCfg, ok := cfg.Services[serviceName]
 	if !ok {
-		var zero toml.Primitive
-		return zero, nil, fmt.Errorf("service %s not found", serviceName)
+		return toml.Primitive{}, nil, fmt.Errorf("service %s not found", serviceName)
 	}
 
 	meta := l.serviceMeta[serviceName]
 	if meta == nil {
-		var zero toml.Primitive
-		return zero, nil, fmt.Errorf("no metadata for service %s", serviceName)
+		return toml.Primitive{}, nil, fmt.Errorf("no metadata for service %s", serviceName)
 	}
 
 	return serviceCfg.Options, meta, nil

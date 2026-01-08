@@ -15,7 +15,7 @@ type ServiceMeta struct {
 
 type ServiceFactory func(meta ServiceMeta, opts interface{}) (Service, error)
 
-var serviceRegistry = struct {
+var factoryRegistry = struct {
 	mu       sync.RWMutex
 	services map[ServiceType]ServiceFactory
 }{
@@ -23,22 +23,22 @@ var serviceRegistry = struct {
 }
 
 func RegisterService(serviceType ServiceType, factory ServiceFactory) {
-	serviceRegistry.mu.Lock()
-	defer serviceRegistry.mu.Unlock()
+	factoryRegistry.mu.Lock()
+	defer factoryRegistry.mu.Unlock()
 
-	if _, exists := serviceRegistry.services[serviceType]; exists {
+	if _, exists := factoryRegistry.services[serviceType]; exists {
 		log.Printf("[service] warning: service factory for %s already registered", serviceType)
 		return
 	}
 
-	serviceRegistry.services[serviceType] = factory
+	factoryRegistry.services[serviceType] = factory
 }
 
 func getServiceFactory(serviceType ServiceType) (ServiceFactory, bool) {
-	serviceRegistry.mu.RLock()
-	defer serviceRegistry.mu.RUnlock()
+	factoryRegistry.mu.RLock()
+	defer factoryRegistry.mu.RUnlock()
 
-	factory, ok := serviceRegistry.services[serviceType]
+	factory, ok := factoryRegistry.services[serviceType]
 	return factory, ok
 }
 
@@ -129,23 +129,14 @@ func (r *Registry) initService(loader *config.Loader, name string, serviceCfg co
 		Description: serviceCfg.Description,
 	}
 
-	service, err := r.createService(serviceType, serviceMeta, opts)
-	if err != nil {
-		return nil, fmt.Errorf("create service: %w", err)
-	}
-
-	return service, nil
-}
-
-func (r *Registry) createService(serviceType ServiceType, meta ServiceMeta, opts interface{}) (Service, error) {
 	factory, ok := getServiceFactory(serviceType)
 	if !ok {
 		return nil, fmt.Errorf("unknown service type %s", serviceType)
 	}
 
-	service, err := factory(meta, opts)
+	service, err := factory(serviceMeta, opts)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create service: %w", err)
 	}
 
 	return service, nil

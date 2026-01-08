@@ -50,9 +50,7 @@ func (a *Application) Initialize(ctx context.Context) error {
 	// Cache enabled agents
 	a.agents = make(map[string]*config.AgentConfig)
 	for name, acfg := range cfg.Agents {
-		// Explicit copy for clarity (though Go 1.22+ handles loop var scoping correctly)
-		cfgCopy := acfg
-		a.agents[name] = &cfgCopy
+		a.agents[name] = &acfg
 	}
 
 	// 3. 初始化 Services
@@ -171,11 +169,6 @@ func (a *Application) Run(ctx context.Context, input *blades.Message) (*blades.M
 		return nil, fmt.Errorf("application not initialized")
 	}
 	return a.runner.Run(ctx, input)
-}
-
-// GetRegistry 获取服务注册表
-func (a *Application) GetRegistry() *service.Registry {
-	return a.registry
 }
 
 // ShutdownWithTimeout 带超时的优雅关闭

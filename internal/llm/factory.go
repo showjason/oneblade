@@ -19,6 +19,13 @@ type Factory struct {
 	validate *validator.Validate
 }
 
+// builderRegistry 存储所有 provider 的 builder
+var builderRegistry = map[string]ModelBuilder{
+	"openai":    newOpenAIBuilder(),
+	"anthropic": newAnthropicBuilder(),
+	"gemini":    newGeminiBuilder(),
+}
+
 func NewFactory() *Factory {
 	return &Factory{validate: validator.New()}
 }
@@ -32,17 +39,12 @@ func (f *Factory) Build(ctx context.Context, cfg config.AgentLLMConfig) (blades.
 
 	applyDefaults(&cfg)
 
-	switch cfg.Provider {
-	case "openai":
-		return buildOpenAI(cfg)
-	case "anthropic":
-		return buildAnthropic(cfg)
-	case "gemini":
-		return buildGemini(ctx, cfg)
-	default:
-		// should be unreachable due to validator `oneof`, keep as defense-in-depth
+	builder, ok := builderRegistry[cfg.Provider]
+	if !ok {
 		return nil, fmt.Errorf("unsupported llm provider: %s", cfg.Provider)
 	}
+
+	return builder.Build(ctx, &cfg)
 }
 
 func normalizeProvider(p string) string {

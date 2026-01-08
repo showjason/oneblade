@@ -28,14 +28,17 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	predictionModel, err := cfg.ModelRegistry.Get(consts.AgentNamePrediction)
 	if err != nil {
 		return nil, err
 	}
+
 	reportModel, err := cfg.ModelRegistry.Get(consts.AgentNameReport)
 	if err != nil {
 		return nil, err
 	}
+
 	orchestratorModel, err := cfg.ModelRegistry.Get(consts.AgentNameOrchestrator)
 	if err != nil {
 		return nil, err
@@ -70,7 +73,7 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 	// 4. Create Main Orchestrator (Routing)
 	return flow.NewRoutingAgent(flow.RoutingConfig{
 		Name:        consts.AgentNameOrchestrator,
-		Description: "SRE 智能巡检系统主控 Agent",
+		Description: consts.OrchestratorDescription,
 		Model:       orchestratorModel,
 		SubAgents: []blades.Agent{
 			analysisAgent,
@@ -85,7 +88,7 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 func newAnalysisFlow(serviceAgent, predictionAgent, reportAgent blades.Agent) blades.Agent {
 	return flow.NewSequentialAgent(flow.SequentialConfig{
 		Name:        consts.AgentNameAnalysis,
-		Description: "顺序执行数据采集、预测分析和报告生成",
+		Description: consts.AnalysisAgentDescription,
 		SubAgents: []blades.Agent{
 			serviceAgent,
 			predictionAgent,

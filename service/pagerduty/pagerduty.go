@@ -143,28 +143,37 @@ func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
 	switch req.Operation {
 	case ListIncidents:
 		if req.ListIncidents == nil {
+			log.Printf("[pagerduty] Handle: list_incidents params is nil, returning error")
 			return Response{Success: false, Message: "missing list_incidents params"}, nil
 		}
 		return s.listIncidents(ctx, req.ListIncidents)
 	case SnoozeAlert:
 		if req.SnoozeAlert == nil {
+			log.Printf("[pagerduty] Handle: snooze_alert params is nil, returning error")
 			return Response{Success: false, Message: "missing snooze_alert params"}, nil
 		}
+		log.Printf("[pagerduty] Handle: snooze_alert params present, calling snoozeAlert")
 		return s.snoozeAlert(ctx, req.SnoozeAlert)
 	case AcknowledgeIncident:
 		if req.AcknowledgeIncident == nil {
+			log.Printf("[pagerduty] Handle: acknowledge_incident params is nil, returning error")
 			return Response{Success: false, Message: "missing acknowledge_incident params"}, nil
 		}
+		log.Printf("[pagerduty] Handle: acknowledge_incident params present, calling acknowledgeIncident")
 		return s.acknowledgeIncident(ctx, req.AcknowledgeIncident)
 	case ResolveIncident:
 		if req.ResolveIncident == nil {
+			log.Printf("[pagerduty] Handle: resolve_incident params is nil, returning error")
 			return Response{Success: false, Message: "missing resolve_incident params"}, nil
 		}
+		log.Printf("[pagerduty] Handle: resolve_incident params present, calling resolveIncident")
 		return s.resolveIncident(ctx, req.ResolveIncident)
 	case GetIncident:
 		if req.GetIncident == nil {
+			log.Printf("[pagerduty] Handle: get_incident params is nil, returning error")
 			return Response{Success: false, Message: "missing get_incident params"}, nil
 		}
+		log.Printf("[pagerduty] Handle: get_incident params present, calling getIncident")
 		return s.getIncident(ctx, req.GetIncident)
 	default:
 		return Response{Success: false, Message: fmt.Sprintf("unknown operation: %s", req.Operation)}, nil
@@ -196,7 +205,7 @@ func (s *Service) Close() error {
 // === Implementations ===
 
 func (s *Service) listIncidents(ctx context.Context, params *ListIncidentsParams) (Response, error) {
-	log.Printf("[pagerduty] listIncidents called with params: limit=%d, statuses=%v", params.Limit, params.Statuses)
+	log.Printf("[pagerduty] listIncidents called with params: limit=%d, statuses=%v, service_ids=%v", params.Limit, params.Statuses, params.ServiceIDs)
 
 	limit := params.Limit
 	if limit == 0 {
@@ -251,8 +260,10 @@ func (s *Service) listIncidents(ctx context.Context, params *ListIncidentsParams
 
 	resp, err := s.client.ListIncidentsWithContext(ctx, opts)
 	if err != nil {
+		log.Printf("[pagerduty] listIncidents failed: %v", err)
 		return Response{Success: false, Message: err.Error()}, nil
 	}
+	log.Printf("[pagerduty] listIncidents succeeded, found %d incidents", len(resp.Incidents))
 
 	if len(resp.Incidents) == 0 {
 		return Response{
@@ -287,9 +298,11 @@ func (s *Service) listIncidents(ctx context.Context, params *ListIncidentsParams
 
 // resolveServiceNamesToIDs 根据 service name 列表查询对应的 service ID 列表
 func (s *Service) resolveServiceNamesToIDs(ctx context.Context, serviceNames []string) ([]string, error) {
-	// 查询所有 services
+	log.Printf("[pagerduty] resolveServiceNamesToIDs called with service_names=%v", serviceNames)
+
 	servicesResp, err := s.client.ListServicesWithContext(ctx, pagerduty.ListServiceOptions{})
 	if err != nil {
+		log.Printf("[pagerduty] resolveServiceNamesToIDs failed to list services: %v", err)
 		return nil, fmt.Errorf("list services: %w", err)
 	}
 
@@ -318,21 +331,16 @@ func (s *Service) resolveServiceNamesToIDs(ctx context.Context, serviceNames []s
 }
 
 func (s *Service) snoozeAlert(ctx context.Context, params *SnoozeAlertParams) (Response, error) {
-	// PagerDuty Go SDK SnoozeIncident method usually takes ID and duration in seconds
-	// Check sdk docs or assume similar to existing capable logic.
-	// Since original code didn't implement snooze, I'll implement best effort.
-	// client.SnoozeIncident(id, durationSeconds)
+	log.Printf("[pagerduty] snoozeAlert called with incident_id=%s, duration=%d minutes", params.IncidentID, params.Duration)
 
 	durationSec := uint(params.Duration * 60)
-	// Note: checking signature of SnoozeIncident in generic thought or assuming it exists.
-	// If it doesn't exist, I might fail build.
-	// Let's assume standard PagerDuty V2 API behavior.
-	// Actually, the go-pagerduty library usually has `SnoozeIncidentWithContext`.
 
 	inc, err := s.client.SnoozeIncidentWithContext(ctx, params.IncidentID, durationSec)
 	if err != nil {
+		log.Printf("[pagerduty] snoozeAlert failed: %v", err)
 		return Response{Success: false, Message: err.Error()}, nil
 	}
+	log.Printf("[pagerduty] snoozeAlert succeeded for incident %s", params.IncidentID)
 
 	// Assuming inc has PendingActions or similar if we want snooze_until.
 	// Or we can just calculate it for response.
@@ -351,8 +359,8 @@ func (s *Service) snoozeAlert(ctx context.Context, params *SnoozeAlertParams) (R
 }
 
 func (s *Service) acknowledgeIncident(ctx context.Context, params *AcknowledgeIncidentParams) (Response, error) {
-	// ManageIncidentsWithContext 的第二个参数是 from（用户 email），用于 HTTP header 的 "From" 字段
-	// 如果 from 为空，PagerDuty 可能会使用 API key 关联的用户
+	log.Printf("[pagerduty] acknowledgeIncident called with incident_id=%s", params.IncidentID)
+
 	_, err := s.client.ManageIncidentsWithContext(ctx, s.from, []pagerduty.ManageIncidentsOptions{
 		{
 			ID:     params.IncidentID,
@@ -361,8 +369,10 @@ func (s *Service) acknowledgeIncident(ctx context.Context, params *AcknowledgeIn
 	})
 
 	if err != nil {
+		log.Printf("[pagerduty] acknowledgeIncident failed: %v", err)
 		return Response{Success: false, Message: err.Error()}, nil
 	}
+	log.Printf("[pagerduty] acknowledgeIncident succeeded for incident %s", params.IncidentID)
 
 	return Response{
 		Operation: AcknowledgeIncident,
@@ -372,8 +382,8 @@ func (s *Service) acknowledgeIncident(ctx context.Context, params *AcknowledgeIn
 }
 
 func (s *Service) resolveIncident(ctx context.Context, params *ResolveIncidentParams) (Response, error) {
-	// ManageIncidentsWithContext 的第二个参数是 from（用户 email），用于 HTTP header 的 "From" 字段
-	// 如果 from 为空，PagerDuty 可能会使用 API key 关联的用户
+	log.Printf("[pagerduty] resolveIncident called with incident_id=%s", params.IncidentID)
+
 	_, err := s.client.ManageIncidentsWithContext(ctx, s.from, []pagerduty.ManageIncidentsOptions{
 		{
 			ID:     params.IncidentID,
@@ -382,8 +392,10 @@ func (s *Service) resolveIncident(ctx context.Context, params *ResolveIncidentPa
 	})
 
 	if err != nil {
+		log.Printf("[pagerduty] resolveIncident failed: %v", err)
 		return Response{Success: false, Message: err.Error()}, nil
 	}
+	log.Printf("[pagerduty] resolveIncident succeeded for incident %s", params.IncidentID)
 
 	return Response{
 		Operation: ResolveIncident,
@@ -393,10 +405,14 @@ func (s *Service) resolveIncident(ctx context.Context, params *ResolveIncidentPa
 }
 
 func (s *Service) getIncident(ctx context.Context, params *GetIncidentParams) (Response, error) {
+	log.Printf("[pagerduty] getIncident called with incident_id=%s", params.IncidentID)
+
 	inc, err := s.client.GetIncidentWithContext(ctx, params.IncidentID)
 	if err != nil {
+		log.Printf("[pagerduty] getIncident failed: %v", err)
 		return Response{Success: false, Message: err.Error()}, nil
 	}
+	log.Printf("[pagerduty] getIncident succeeded for incident %s", params.IncidentID)
 
 	return Response{
 		Operation: GetIncident,
