@@ -621,8 +621,8 @@ enabled = true
 	})
 }
 
-// TestLoader_Load_AgentValidationRules 测试 agent 验证规则
-func TestLoader_Load_AgentValidationRules(t *testing.T) {
+// TestLoader_Load_FilterEnabledAgents 测试 agent 筛选功能
+func TestLoader_Load_FilterEnabledAgents(t *testing.T) {
 	baseConfig := `
 [server]
 addr = "localhost:8080"
@@ -632,79 +632,7 @@ type = "prometheus"
 enabled = false
 `
 
-	t.Run("orchestrator 必须存在", func(t *testing.T) {
-		configContent := baseConfig + `
-[agents.service_agent]
-enabled = true
-[agents.service_agent.llm]
-provider = "openai"
-model = "gpt-4"
-`
-		configPath := createTempConfig(t, configContent)
-
-		loader := NewLoader(configPath)
-		_, err := loader.Load()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "orchestrator agent orchestrator is required")
-	})
-
-	t.Run("orchestrator 必须开启", func(t *testing.T) {
-		configContent := baseConfig + `
-[agents.orchestrator]
-enabled = false
-[agents.orchestrator.llm]
-provider = "openai"
-model = "gpt-4"
-
-[agents.service_agent]
-enabled = true
-[agents.service_agent.llm]
-provider = "openai"
-model = "gpt-4"
-`
-		configPath := createTempConfig(t, configContent)
-
-		loader := NewLoader(configPath)
-		_, err := loader.Load()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "orchestrator agent orchestrator must be enabled")
-	})
-
-	t.Run("子 agents 至少一个必须开启", func(t *testing.T) {
-		configContent := baseConfig + `
-[agents.orchestrator]
-enabled = true
-[agents.orchestrator.llm]
-provider = "openai"
-model = "gpt-4"
-
-[agents.service_agent]
-enabled = false
-[agents.service_agent.llm]
-provider = "openai"
-model = "gpt-4"
-
-[agents.prediction_agent]
-enabled = false
-[agents.prediction_agent.llm]
-provider = "openai"
-model = "gpt-4"
-
-[agents.report_agent]
-enabled = false
-[agents.report_agent.llm]
-provider = "openai"
-model = "gpt-4"
-`
-		configPath := createTempConfig(t, configContent)
-
-		loader := NewLoader(configPath)
-		_, err := loader.Load()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "at least one sub agent")
-	})
-
-	t.Run("验证通过且筛选 enabled agents", func(t *testing.T) {
+	t.Run("验证筛选 enabled agents", func(t *testing.T) {
 		configContent := baseConfig + `
 [agents.orchestrator]
 enabled = true

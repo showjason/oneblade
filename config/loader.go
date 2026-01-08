@@ -7,8 +7,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/go-playground/validator/v10"
-
-	"github.com/oneblade/internal/consts"
 )
 
 // Loader 配置加载器
@@ -33,8 +31,9 @@ func NewLoader(configPath string) *Loader {
 func (l *Loader) extractServiceMeta(meta *toml.MetaData, cfg *Config) {
 	// 为每个 service 保存元数据副本
 	for name := range cfg.Services {
-		metaCopy := *meta
-		l.serviceMeta[name] = &metaCopy
+		if metaCopy := *meta; true {
+			l.serviceMeta[name] = &metaCopy
+		}
 	}
 }
 
@@ -53,38 +52,18 @@ func (l *Loader) Load() (*Config, error) {
 		return nil, fmt.Errorf("parse config file %s: %w", l.configPath, err)
 	}
 
-	// 严格模式：禁止存在未解码的配置项，避免拼写错误/过期配置被静默忽略。
-	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
-		// Note: `[services.<name>.options]` 采用 toml.Primitive 延迟解析，
-		// meta.Undecoded() 会把 options 下的 leaf keys 视为未解码，这是预期行为。
-		// 因此这里需要忽略该路径下的 keys。
-		var unknown []toml.Key
-		for _, k := range undecoded {
-			// Expected undecoded key example: ["services","prometheus","options","address"]
-			if len(k) >= 3 && k[0] == "services" && k[2] == "options" {
-				continue
-			}
-			unknown = append(unknown, k)
-		}
-		if len(unknown) > 0 {
-			return nil, fmt.Errorf("parse config file %s: unknown keys: %v", l.configPath, unknown)
-		}
+	// strict mode check for unknown keys
+	if err := l.checkUnknownKeys(&meta); err != nil {
+		return nil, err
 	}
 
-	// 验证配置
+	// 验证配置结构
 	if err := l.validate(&cfg); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
 
-	// 验证 agent 强制规则
-	if err := l.validateAgentRules(&cfg); err != nil {
-		return nil, fmt.Errorf("validate agent rules: %w", err)
-	}
-
-	// 筛选 enabled agents
+	// 筛选 enabled agents 和 services
 	l.filterEnabledAgents(&cfg)
-
-	// 筛选 enabled services
 	l.filterEnabledServices(&cfg)
 
 	// 提取 service 元数据
@@ -92,6 +71,24 @@ func (l *Loader) Load() (*Config, error) {
 
 	l.config = &cfg
 	return &cfg, nil
+}
+
+// checkUnknownKeys checks for undecoded keys in the config
+func (l *Loader) checkUnknownKeys(meta *toml.MetaData) error {
+	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
+		var unknown []toml.Key
+		for _, k := range undecoded {
+			// Ignore [services.<name>.options] as they are delayed parsed
+			if len(k) >= 3 && k[0] == "services" && k[2] == "options" {
+				continue
+			}
+			unknown = append(unknown, k)
+		}
+		if len(unknown) > 0 {
+			return fmt.Errorf("parse config file %s: unknown keys: %v", l.configPath, unknown)
+		}
+	}
+	return nil
 }
 
 // loadAndExpand 读取文件并展开环境变量
@@ -135,33 +132,6 @@ func expandEnv(s string) string {
 // validate 验证配置
 func (l *Loader) validate(cfg *Config) error {
 	return l.validator.Struct(cfg)
-}
-
-// validateAgentRules 验证 agent 的强制规则
-func (l *Loader) validateAgentRules(cfg *Config) error {
-	subAgentNames := []string{consts.AgentNameService, consts.AgentNamePrediction, consts.AgentNameReport}
-
-	// 验证 orchestrator 必须存在且开启
-	orchestrator, ok := cfg.Agents[consts.AgentNameOrchestrator]
-	if !ok {
-		return fmt.Errorf("orchestrator agent %s is required but not found", consts.AgentNameOrchestrator)
-	}
-	if !orchestrator.Enabled {
-		return fmt.Errorf("orchestrator agent %s must be enabled", consts.AgentNameOrchestrator)
-	}
-
-	// 验证子 agents 至少一个开启
-	enabledSubAgents := 0
-	for _, name := range subAgentNames {
-		if agent, ok := cfg.Agents[name]; ok && agent.Enabled {
-			enabledSubAgents++
-		}
-	}
-	if enabledSubAgents == 0 {
-		return fmt.Errorf("at least one sub agent (%s, %s, %s) must be enabled", consts.AgentNameService, consts.AgentNamePrediction, consts.AgentNameReport)
-	}
-
-	return nil
 }
 
 // filterEnabledAgents 筛选出 enabled 的 agents

@@ -59,53 +59,30 @@ func (r *Registry) InitFromConfig(loader *config.Loader) error {
 		return fmt.Errorf("failed to get config: %w", err)
 	}
 
-	// 1. Initialize services concurrently
 	// Note: loader.Get() already filters out disabled services
 	enabledCount := len(cfg.Services)
 	if enabledCount == 0 {
 		return nil
 	}
 
-	type result struct {
-		name    string
-		service Service
-		err     error
-	}
-
-	resultCh := make(chan result, enabledCount)
-	var wg sync.WaitGroup
-
-	for name, serviceCfg := range cfg.Services {
-		wg.Add(1)
-		go func(n string, sCfg config.ServiceConfig) {
-			defer wg.Done()
-			svc, err := r.initService(loader, n, sCfg)
-			resultCh <- result{name: n, service: svc, err: err}
-		}(name, serviceCfg)
-	}
-
-	// Close channel when all goroutines are done
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
-	// 3. Collect results
 	var (
 		initErrors  []error
 		newServices = make(map[string]Service)
 	)
 
-	for res := range resultCh {
-		if res.err != nil {
-			initErrors = append(initErrors, res.err)
-		} else {
-			newServices[res.name] = res.service
-			log.Printf("[service] initialized %s", res.name)
+	// Sequential Initialization
+	for name, serviceCfg := range cfg.Services {
+		svc, err := r.initService(loader, name, serviceCfg)
+		if err != nil {
+			log.Printf("[service] error initializing %s: %v", name, err)
+			initErrors = append(initErrors, fmt.Errorf("service %s: %w", name, err))
+			continue
 		}
+		newServices[name] = svc
+		log.Printf("[service] initialized %s", name)
 	}
 
-	// 4. Handle results
+	// Handle results
 	successCount := len(newServices)
 	if successCount == 0 && enabledCount > 0 {
 		return fmt.Errorf("all %d enabled service(s) failed to initialize: %v", enabledCount, initErrors)
@@ -113,12 +90,9 @@ func (r *Registry) InitFromConfig(loader *config.Loader) error {
 
 	if len(initErrors) > 0 {
 		log.Printf("[service] warning: %d service(s) failed to initialize, %d succeeded", len(initErrors), successCount)
-		for _, err := range initErrors {
-			log.Printf("  - %v", err)
-		}
 	}
 
-	// 5. Update registry
+	// Update registry
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for name, s := range newServices {
@@ -133,20 +107,20 @@ func (r *Registry) initService(loader *config.Loader, name string, serviceCfg co
 	// Get primitive options
 	primitive, meta, err := loader.GetServiceOptions(name)
 	if err != nil {
-		return nil, fmt.Errorf("get options for %s: %w", name, err)
+		return nil, fmt.Errorf("get options: %w", err)
 	}
 
 	// Get parser
 	serviceType := ServiceType(serviceCfg.Type)
 	parser, ok := GetOptionsParser(serviceType)
 	if !ok {
-		return nil, fmt.Errorf("no parser registered for service type %s (service: %s)", serviceType, name)
+		return nil, fmt.Errorf("no parser registered for type %s", serviceType)
 	}
 
 	// Parse options
 	opts, err := parser(meta, primitive)
 	if err != nil {
-		return nil, fmt.Errorf("parse options for %s: %w", name, err)
+		return nil, fmt.Errorf("parse options: %w", err)
 	}
 
 	// Create service
@@ -157,7 +131,7 @@ func (r *Registry) initService(loader *config.Loader, name string, serviceCfg co
 
 	service, err := r.createService(serviceType, serviceMeta, opts)
 	if err != nil {
-		return nil, fmt.Errorf("create service %s: %w", name, err)
+		return nil, fmt.Errorf("create service: %w", err)
 	}
 
 	return service, nil
@@ -166,12 +140,12 @@ func (r *Registry) initService(loader *config.Loader, name string, serviceCfg co
 func (r *Registry) createService(serviceType ServiceType, meta ServiceMeta, opts interface{}) (Service, error) {
 	factory, ok := getServiceFactory(serviceType)
 	if !ok {
-		return nil, fmt.Errorf("unknown service type: %s (no factory registered)", serviceType)
+		return nil, fmt.Errorf("unknown service type %s", serviceType)
 	}
 
 	service, err := factory(meta, opts)
 	if err != nil {
-		return nil, fmt.Errorf("create service %s: %w", serviceType, err)
+		return nil, err
 	}
 
 	return service, nil
@@ -202,7 +176,7 @@ func (r *Registry) Close() error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("errors: %v", errs)
+		return fmt.Errorf("close errors: %v", errs)
 	}
 	return nil
 }
