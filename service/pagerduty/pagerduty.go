@@ -28,14 +28,13 @@ func init() {
 
 type Options struct {
 	APIKey string `toml:"api_key" validate:"required"`
-	From   string `toml:"from"` // 可选：执行操作的用户 email，用于 PagerDuty API 的 From header
+	From   string `toml:"from"`
 }
 
 type Service struct {
 	name        string
 	description string
-	apiKey      string
-	from        string // 执行操作的用户 email
+	opts        *Options
 	client      *pagerduty.Client
 }
 
@@ -45,8 +44,7 @@ func NewService(meta service.ServiceMeta, opts *Options) *Service {
 	return &Service{
 		name:        meta.Name,
 		description: meta.Description,
-		apiKey:      opts.APIKey,
-		from:        opts.From,
+		opts:        opts,
 		client:      pagerduty.NewClient(opts.APIKey),
 	}
 }
@@ -361,7 +359,7 @@ func (s *Service) snoozeAlert(ctx context.Context, params *SnoozeAlertParams) (R
 func (s *Service) acknowledgeIncident(ctx context.Context, params *AcknowledgeIncidentParams) (Response, error) {
 	log.Printf("[pagerduty] acknowledgeIncident called with incident_id=%s", params.IncidentID)
 
-	_, err := s.client.ManageIncidentsWithContext(ctx, s.from, []pagerduty.ManageIncidentsOptions{
+	_, err := s.client.ManageIncidentsWithContext(ctx, s.opts.From, []pagerduty.ManageIncidentsOptions{
 		{
 			ID:     params.IncidentID,
 			Status: "acknowledged",
@@ -384,7 +382,7 @@ func (s *Service) acknowledgeIncident(ctx context.Context, params *AcknowledgeIn
 func (s *Service) resolveIncident(ctx context.Context, params *ResolveIncidentParams) (Response, error) {
 	log.Printf("[pagerduty] resolveIncident called with incident_id=%s", params.IncidentID)
 
-	_, err := s.client.ManageIncidentsWithContext(ctx, s.from, []pagerduty.ManageIncidentsOptions{
+	_, err := s.client.ManageIncidentsWithContext(ctx, s.opts.From, []pagerduty.ManageIncidentsOptions{
 		{
 			ID:     params.IncidentID,
 			Status: "resolved",
