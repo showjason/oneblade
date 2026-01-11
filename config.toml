@@ -4,7 +4,7 @@
 # Agent 配置（严格 per-agent，不支持继承）
 # 每个 agent 必须完整定义 required 字段：provider/model
 # orchestrator 必须 enabled=true
-# 子 agents（service_agent, prediction_agent, report_agent）中至少有一个必须 enabled=true
+# Subagents（service_agent, prediction_agent, report_agent）中至少有一个必须 enabled=true
 
 [agents.orchestrator]
 enabled = true
@@ -74,7 +74,7 @@ type = "pagerduty"
 enabled = true
 [services.pagerduty.options]
 api_key = "${PAGERDUTY_API_KEY}"
-# from = "${PAGERDUTY_FROM:}"  # 可选：执行操作的用户 email，用于 PagerDuty API 的 From header
+# from = "${PAGERDUTY_FROM:}"
 
 [services.opensearch]
 type = "opensearch"

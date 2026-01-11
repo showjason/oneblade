@@ -12,6 +12,11 @@ import (
 	"github.com/oneblade/internal/consts"
 	"github.com/oneblade/internal/llm"
 	"github.com/oneblade/service"
+
+	// registry imports services to register init functions
+	_ "github.com/oneblade/service/opensearch"
+	_ "github.com/oneblade/service/pagerduty"
+	_ "github.com/oneblade/service/prometheus"
 )
 
 // Application 应用程序核心结构体
@@ -50,7 +55,9 @@ func (a *Application) Initialize(ctx context.Context) error {
 	// Cache enabled agents
 	a.agents = make(map[string]*config.AgentConfig)
 	for name, acfg := range cfg.Agents {
-		a.agents[name] = &acfg
+		if acfg.Enabled {
+			a.agents[name] = &acfg
+		}
 	}
 
 	// 3. 初始化 Services
@@ -121,13 +128,19 @@ func (a *Application) initModels(ctx context.Context) error {
 }
 
 func (a *Application) initOrchestrator() error {
+	enabledAgents := make([]string, 0, len(a.agents))
+	for name := range a.agents {
+		enabledAgents = append(enabledAgents, name)
+	}
+
 	// 创建 Orchestrator Agent
 	orchestrator, err := agent.NewOrchestratorAgent(agent.OrchestratorConfig{
 		ModelRegistry: a.modelReg,
 		Services:      a.registry.All(),
+		EnabledAgents: enabledAgents,
 	})
 	if err != nil {
-		return fmt.Errorf("create orchestrator: %w", err)
+		return fmt.Errorf("create orchestrator failed: %w", err)
 	}
 	a.orchestrator = orchestrator
 

@@ -15,6 +15,7 @@ import (
 type OrchestratorConfig struct {
 	ModelRegistry *llm.ModelRegistry
 	Services      []service.Service
+	EnabledAgents []string
 }
 
 // NewOrchestratorAgent 创建主编排 Agent
@@ -23,77 +24,76 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 		return nil, fmt.Errorf("ModelRegistry is required")
 	}
 
-	// 1. Resolve Models
-	serviceModel, err := cfg.ModelRegistry.Get(consts.AgentNameService)
-	if err != nil {
-		return nil, err
+	// 1. 获取 orchestrator model（已在 validateRules 中验证必须存在且启用）
+	orchestratorModel, _ := cfg.ModelRegistry.Get(consts.AgentNameOrchestrator)
+
+	// 2. 动态创建子 agent
+	agentMap := make(map[string]blades.Agent)
+	for _, agentName := range cfg.EnabledAgents {
+		// 跳过 orchestrator 自身
+		if agentName == consts.AgentNameOrchestrator {
+			continue
+		}
+
+		model, err := cfg.ModelRegistry.Get(agentName)
+		if err != nil {
+			return nil, err
+		}
+
+		var agent blades.Agent
+		switch agentName {
+		case consts.AgentNameService:
+			agent, err = NewServiceAgent(ServiceAgent{Model: model, Services: cfg.Services})
+		case consts.AgentNamePrediction:
+			agent, err = NewPredictionAgent(PredictionAgentConfig{Model: model})
+		case consts.AgentNameReport:
+			agent, err = NewReportAgent(ReportAgentConfig{Model: model})
+		default:
+			continue // 忽略未知的 agent 类型
+		}
+
+		if err != nil {
+			return nil, err
+		}
+		agentMap[agentName] = agent
 	}
 
-	predictionModel, err := cfg.ModelRegistry.Get(consts.AgentNamePrediction)
-	if err != nil {
-		return nil, err
+	// 4. 创建 analysisFlow 和最终的 SubAgents 列表
+	analysisAgent := newAnalysisFlow(agentMap)
+
+	subAgents := []blades.Agent{analysisAgent}
+	for _, agent := range agentMap {
+		subAgents = append(subAgents, agent)
 	}
 
-	reportModel, err := cfg.ModelRegistry.Get(consts.AgentNameReport)
-	if err != nil {
-		return nil, err
-	}
-
-	orchestratorModel, err := cfg.ModelRegistry.Get(consts.AgentNameOrchestrator)
-	if err != nil {
-		return nil, err
-	}
-
-	// 2. Create Leaf Agents
-	serviceAgent, err := NewServiceAgent(ServiceAgent{
-		Model:    serviceModel,
-		Services: cfg.Services,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	reportAgent, err := NewReportAgent(ReportAgentConfig{
-		Model: reportModel,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	predictionAgent, err := NewPredictionAgent(PredictionAgentConfig{
-		Model: predictionModel,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// 3. Create Flows
-	analysisAgent := newAnalysisFlow(serviceAgent, predictionAgent, reportAgent)
-
-	// 4. Create Main Orchestrator (Routing)
 	return flow.NewRoutingAgent(flow.RoutingConfig{
 		Name:        consts.AgentNameOrchestrator,
 		Description: consts.OrchestratorDescription,
 		Model:       orchestratorModel,
-		SubAgents: []blades.Agent{
-			analysisAgent,
-			serviceAgent, // Direct access for single-shot tasks
-			reportAgent,
-			predictionAgent,
-		},
+		SubAgents:   subAgents,
 	})
 }
 
 // newAnalysisFlow creates the sequential analysis workflow
-func newAnalysisFlow(serviceAgent, predictionAgent, reportAgent blades.Agent) blades.Agent {
+func newAnalysisFlow(agents map[string]blades.Agent) blades.Agent {
+	// 按固定顺序添加启用的 agent
+	order := []string{
+		consts.AgentNameService,
+		consts.AgentNamePrediction,
+		consts.AgentNameReport,
+	}
+
+	var subAgents []blades.Agent
+	for _, name := range order {
+		if agent, ok := agents[name]; ok {
+			subAgents = append(subAgents, agent)
+		}
+	}
+
 	return flow.NewSequentialAgent(flow.SequentialConfig{
 		Name:        consts.AgentNameAnalysis,
 		Description: consts.AnalysisAgentDescription,
-		SubAgents: []blades.Agent{
-			serviceAgent,
-			predictionAgent,
-			reportAgent,
-		},
+		SubAgents:   subAgents,
 	})
 }
 

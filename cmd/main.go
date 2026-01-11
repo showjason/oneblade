@@ -11,11 +11,6 @@ import (
 	"github.com/go-kratos/blades"
 
 	"github.com/oneblade/internal/app"
-
-	// registry imports services to register init functions
-	_ "github.com/oneblade/service/opensearch"
-	_ "github.com/oneblade/service/pagerduty"
-	_ "github.com/oneblade/service/prometheus"
 )
 
 func main() {
