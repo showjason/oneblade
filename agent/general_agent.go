@@ -9,13 +9,11 @@ import (
 	"github.com/oneblade/internal/consts"
 )
 
-// GeneralAgent Config
 type GeneralAgentConfig struct {
 	Model blades.ModelProvider
 	Tools []tools.Tool
 }
 
-// NewGeneralAgent 创建通用工具 Agent
 func NewGeneralAgent(cfg GeneralAgentConfig) (blades.Agent, error) {
 	if len(cfg.Tools) == 0 {
 		return nil, fmt.Errorf("GeneralAgent requires at least one tool")

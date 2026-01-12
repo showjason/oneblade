@@ -12,7 +12,6 @@ import (
 	"github.com/oneblade/service"
 )
 
-// Orchestrator 编排 Agent 配置
 type OrchestratorConfig struct {
 	ModelRegistry          *llm.ModelRegistry
 	Services               []service.Service
@@ -83,9 +82,7 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 	})
 }
 
-// newAnalysisFlow creates the sequential analysis workflow
 func newAnalysisFlow(agents map[string]blades.Agent) blades.Agent {
-	// 按固定顺序添加启用的 agent
 	order := []string{
 		consts.AgentNameService,
 		consts.AgentNamePrediction,

@@ -21,19 +21,16 @@ func NewServiceAgent(cfg ServiceAgent) (blades.Agent, error) {
 	var serviceDescriptions []string
 
 	for _, s := range cfg.Services {
-		// Get Tool
 		tool, err := s.AsTool()
 		if err != nil {
 			return nil, fmt.Errorf("create tool for %s: %v", s.Name(), err)
 		}
 		serviceTools = append(serviceTools, tool)
 
-		// Get Description for Prompt
 		desc := fmt.Sprintf("%d. **%s** (%s) - %s", len(serviceTools), s.Name(), s.Type(), s.Description())
 		serviceDescriptions = append(serviceDescriptions, desc)
 	}
 
-	// Dynamic Instruction Construction
 	instruction := fmt.Sprintf(consts.ServiceAgentInstruction, strings.Join(serviceDescriptions, "\n"))
 
 	return blades.NewAgent(
