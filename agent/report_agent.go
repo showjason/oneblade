@@ -15,7 +15,7 @@ type ReportAgentConfig struct {
 func NewReportAgent(cfg ReportAgentConfig) (blades.Agent, error) {
 	return blades.NewAgent(
 		consts.AgentNameReport,
-		blades.WithDescription("负责汇总分析数据并生成巡检报告的 Agent"),
+		blades.WithDescription(consts.ReportAgentDescription),
 		blades.WithInstruction(consts.ReportAgentInstruction),
 		blades.WithModel(cfg.Model),
 	)

@@ -304,7 +304,21 @@ const (
 
 基于数据给出有依据的预测和建议。`
 
+	// GeneralAgentInstruction 通用工具 Agent 提示词
+	GeneralAgentInstruction = `你是一个通用工具 Agent，负责执行各种系统操作和其它杂项任务。
+  
+  你的职责:
+  1. 根据用户请求执行各种系统操作和其它杂项任务
+  2. 提供可操作的改进建议
+  3. 确保任务执行成功
+  
+  `
+
 	// Orchestrator Descriptions
-	OrchestratorDescription  = "SRE 智能巡检系统主控 Agent"
-	AnalysisAgentDescription = "顺序执行数据采集、预测分析和报告生成"
+	OrchestratorDescription    = "SRE 智能巡检系统主控 Agent"
+	ServiceAgentDescription    = "负责与各类服务交互的 Agent，提供数据采集和操作能力"
+	AnalysisAgentDescription   = "顺序执行数据采集、预测分析和报告生成"
+	PredictionAgentDescription = "负责基于历史数据进行健康预测的 Agent"
+	ReportAgentDescription     = "负责汇总分析数据并生成巡检报告的 Agent"
+	GeneralAgentDescription    = "负责通用工具的 Agent，提供系统操作和其它杂项任务的能力"
 )

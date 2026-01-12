@@ -15,7 +15,7 @@ type PredictionAgentConfig struct {
 func NewPredictionAgent(cfg PredictionAgentConfig) (blades.Agent, error) {
 	return blades.NewAgent(
 		consts.AgentNamePrediction,
-		blades.WithDescription("负责基于历史数据进行健康预测的 Agent"),
+		blades.WithDescription(consts.PredictionAgentDescription),
 		blades.WithInstruction(consts.PredictionAgentInstruction),
 		blades.WithModel(cfg.Model),
 	)

@@ -11,15 +11,12 @@ import (
 	"github.com/oneblade/service"
 )
 
-// ServiceAgent Service Agent 配置
 type ServiceAgent struct {
 	Model    blades.ModelProvider
 	Services []service.Service
 }
 
-// NewServiceAgent 创建统一服务 Tool Agent
 func NewServiceAgent(cfg ServiceAgent) (blades.Agent, error) {
-	// 创建各个 Service Tool
 	var serviceTools []tools.Tool
 	var serviceDescriptions []string
 
@@ -41,7 +38,7 @@ func NewServiceAgent(cfg ServiceAgent) (blades.Agent, error) {
 
 	return blades.NewAgent(
 		consts.AgentNameService,
-		blades.WithDescription("负责与各类服务交互的 Agent，提供数据采集和操作能力"),
+		blades.WithDescription(consts.ServiceAgentDescription),
 		blades.WithInstruction(instruction),
 		blades.WithModel(cfg.Model),
 		blades.WithTools(serviceTools...),

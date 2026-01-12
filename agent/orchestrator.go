@@ -21,19 +21,15 @@ type OrchestratorConfig struct {
 	ConversationMaxMessage int
 }
 
-// NewOrchestratorAgent 创建主编排 Agent
 func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 	if cfg.ModelRegistry == nil {
 		return nil, fmt.Errorf("ModelRegistry is required")
 	}
 
-	// 1. 获取 orchestrator model（已在 validateRules 中验证必须存在且启用）
 	orchestratorModel, _ := cfg.ModelRegistry.Get(consts.AgentNameOrchestrator)
 
-	// 2. 动态创建子 agent
 	agentMap := make(map[string]blades.Agent)
 	for _, agentName := range cfg.EnabledAgents {
-		// 跳过 orchestrator 自身
 		if agentName == consts.AgentNameOrchestrator {
 			continue
 		}
@@ -52,7 +48,7 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 		case consts.AgentNameReport:
 			agent, err = NewReportAgent(ReportAgentConfig{Model: model})
 		default:
-			continue // 忽略未知的 agent 类型
+			continue
 		}
 
 		if err != nil {
@@ -61,42 +57,23 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 		agentMap[agentName] = agent
 	}
 
-	// 3. 创建并添加 GeneralAgent (如果存在配置的工具)
-	if len(cfg.Tools) > 0 {
-		generalModel, err := cfg.ModelRegistry.Get(consts.AgentNameGeneral)
-		if err != nil {
-			// 如果没有专门配置 general model，降级使用 orchestrator model
-			generalModel = orchestratorModel
-		}
+	generalModel, err := cfg.ModelRegistry.Get(consts.AgentNameGeneral)
 
-		generalAgent, err := NewGeneralAgent(GeneralAgentConfig{
-			Model: generalModel,
-			Tools: cfg.Tools,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create general agent: %v", err)
-		}
-		agentMap[consts.AgentNameGeneral] = generalAgent
+	generalAgent, err := NewGeneralAgent(GeneralAgentConfig{
+		Model: generalModel,
+		Tools: cfg.Tools,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create general agent: %v", err)
 	}
-
-	// 4. 创建 analysisFlow 和最终的 SubAgents 列表
-	// newAnalysisFlow 用于组织 Analysis 相关的顺序流 (Service -> Prediction -> Report)
+	agentMap[consts.AgentNameGeneral] = generalAgent
 	analysisAgent := newAnalysisFlow(agentMap)
-
 	subAgents := []blades.Agent{analysisAgent}
-	// 将其他独立的 agent 也加入到 subAgents 中 (包括 GeneralAgent)
 	for name, agent := range agentMap {
-		// Analysis flow 已经包含了这些 agent，这里再次添加是为了让 Orchestrator 也可以直接路由到它们 (如果需要)
-		// 但为了避免混淆，我们可以只添加不属于 Analysis flow 的 agent
-		// 或者，为了简单起见，且遵循 RoutingAgent 的设计，我们可以把主要能力暴露出来
-
-		// 这里我们保留所有生成的 agent 作为候选，Orchestrator 会根据描述选择
-		// 注意: analysisAgent 是一个组合 agent
 		if name != consts.AgentNameService && name != consts.AgentNamePrediction && name != consts.AgentNameReport {
 			subAgents = append(subAgents, agent)
 		}
 	}
-	// 确保 GeneralAgent 被添加 (如果它不在上面的 exclusion list 中，它已经被添加了)
 
 	return flow.NewRoutingAgent(flow.RoutingConfig{
 		Name:        consts.AgentNameOrchestrator,
@@ -129,7 +106,6 @@ func newAnalysisFlow(agents map[string]blades.Agent) blades.Agent {
 	})
 }
 
-// NewInspectionRunner 创建巡检启动器
 func NewInspectionRunner(orchestrator blades.Agent) *blades.Runner {
 	return blades.NewRunner(orchestrator, blades.WithResumable(true))
 }

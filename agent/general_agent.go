@@ -23,8 +23,8 @@ func NewGeneralAgent(cfg GeneralAgentConfig) (blades.Agent, error) {
 
 	return blades.NewAgent(
 		consts.AgentNameGeneral,
-		blades.WithDescription("General utility agent for system operations and other miscellaneous tasks."),
-		blades.WithInstruction("You are a general utility agent capable of performing various system operations. Use the provided tools to fulfill the user's request."),
+		blades.WithDescription(consts.GeneralAgentDescription),
+		blades.WithInstruction(consts.GeneralAgentInstruction),
 		blades.WithModel(cfg.Model),
 		blades.WithTools(cfg.Tools...),
 	)
