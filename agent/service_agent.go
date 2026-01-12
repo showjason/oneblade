@@ -8,6 +8,7 @@ import (
 	"github.com/go-kratos/blades/tools"
 
 	"github.com/oneblade/internal/consts"
+	"github.com/oneblade/internal/middleware"
 	"github.com/oneblade/service"
 )
 
@@ -39,5 +40,6 @@ func NewServiceAgent(cfg ServiceAgent) (blades.Agent, error) {
 		blades.WithInstruction(instruction),
 		blades.WithModel(cfg.Model),
 		blades.WithTools(serviceTools...),
+		blades.WithMiddleware(middleware.NewAgentLogging),
 	)
 }

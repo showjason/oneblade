@@ -26,7 +26,19 @@ func resolveModel(cfg *config.AgentLLMConfig, model string) string {
 
 // getAPIKey 通用 API Key 获取逻辑
 func resolveAPIKey(cfg *config.AgentLLMConfig, apiKey string) (string, error) {
-	apiKeyVal := firstNonEmpty(strings.TrimSpace(cfg.APIKey), os.Getenv(apiKey))
+	apiKeyVal := strings.TrimSpace(cfg.APIKey)
+	if apiKeyVal == "" {
+		for _, k := range strings.Split(apiKey, ",") {
+			k = strings.TrimSpace(k)
+			if k == "" {
+				continue
+			}
+			apiKeyVal = strings.TrimSpace(os.Getenv(k))
+			if apiKeyVal != "" {
+				break
+			}
+		}
+	}
 	if apiKeyVal == "" {
 		return "", fmt.Errorf("%s api key not configured (api_key or %s)", cfg.Model, apiKey)
 	}

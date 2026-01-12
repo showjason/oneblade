@@ -4,6 +4,7 @@ import (
 	"github.com/go-kratos/blades"
 
 	"github.com/oneblade/internal/consts"
+	"github.com/oneblade/internal/middleware"
 )
 
 type ReportAgentConfig struct {
@@ -16,5 +17,6 @@ func NewReportAgent(cfg ReportAgentConfig) (blades.Agent, error) {
 		blades.WithDescription(consts.ReportAgentDescription),
 		blades.WithInstruction(consts.ReportAgentInstruction),
 		blades.WithModel(cfg.Model),
+		blades.WithMiddleware(middleware.NewAgentLogging),
 	)
 }

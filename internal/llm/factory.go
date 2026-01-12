@@ -68,14 +68,3 @@ func applyDefaults(cfg *config.AgentLLMConfig) {
 		cfg.Temperature = &defaultTemperature
 	}
 }
-
-// firstNonEmpty 返回第一个非空字符串（去除首尾空格后）
-// 用于按优先级顺序检查配置值和环境变量
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
-}

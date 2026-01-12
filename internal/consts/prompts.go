@@ -315,7 +315,7 @@ const (
   `
 
 	// Orchestrator Descriptions
-	OrchestratorDescription    = "SRE 智能巡检系统主控 Agent"
+	OrchestratorDescription    = "智能巡检系统主控 Agent"
 	ServiceAgentDescription    = "负责与各类服务交互的 Agent，提供数据采集和操作能力"
 	AnalysisAgentDescription   = "顺序执行数据采集、预测分析和报告生成"
 	PredictionAgentDescription = "负责基于历史数据进行健康预测的 Agent"

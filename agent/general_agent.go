@@ -7,6 +7,7 @@ import (
 	"github.com/go-kratos/blades/tools"
 
 	"github.com/oneblade/internal/consts"
+	"github.com/oneblade/internal/middleware"
 )
 
 type GeneralAgentConfig struct {
@@ -25,5 +26,6 @@ func NewGeneralAgent(cfg GeneralAgentConfig) (blades.Agent, error) {
 		blades.WithInstruction(consts.GeneralAgentInstruction),
 		blades.WithModel(cfg.Model),
 		blades.WithTools(cfg.Tools...),
+		blades.WithMiddleware(middleware.NewAgentLogging),
 	)
 }

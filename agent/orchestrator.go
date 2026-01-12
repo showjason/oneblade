@@ -56,16 +56,16 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 		agentMap[agentName] = agent
 	}
 
-	generalModel, err := cfg.ModelRegistry.Get(consts.AgentNameGeneral)
+	// generalModel, _ := cfg.ModelRegistry.Get(consts.AgentNameGeneral)
 
-	generalAgent, err := NewGeneralAgent(GeneralAgentConfig{
-		Model: generalModel,
-		Tools: cfg.Tools,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create general agent: %v", err)
-	}
-	agentMap[consts.AgentNameGeneral] = generalAgent
+	// generalAgent, err := NewGeneralAgent(GeneralAgentConfig{
+	// 	Model: generalModel,
+	// 	Tools: cfg.Tools,
+	// })
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to create general agent: %v", err)
+	// }
+	// agentMap[consts.AgentNameGeneral] = generalAgent
 	analysisAgent := newAnalysisFlow(agentMap)
 	subAgents := []blades.Agent{analysisAgent}
 	for name, agent := range agentMap {
