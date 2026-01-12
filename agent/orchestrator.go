@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/go-kratos/blades"
 	"github.com/go-kratos/blades/flow"
@@ -54,6 +55,7 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 			return nil, err
 		}
 		agentMap[agentName] = agent
+		slog.Info("orchestrator.agent.created", "agent", agentName)
 	}
 
 	// generalModel, _ := cfg.ModelRegistry.Get(consts.AgentNameGeneral)
@@ -67,16 +69,30 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 	// }
 	// agentMap[consts.AgentNameGeneral] = generalAgent
 	analysisAgent := newAnalysisFlow(agentMap)
+	
+	// 构建 subAgents 列表：包含所有独立的 agent 和 analysisAgent
+	// service_agent 需要单独列出，因为用户可能直接请求查询外部系统
 	subAgents := []blades.Agent{analysisAgent}
+	subAgentNames := []string{consts.AgentNameAnalysis}
+	
+	// 添加所有独立的 agent（包括 service_agent、prediction_agent、report_agent）
+	// 这样 RoutingAgent 可以直接路由到它们，而不需要经过 analysisAgent
 	for name, agent := range agentMap {
-		if name != consts.AgentNameService && name != consts.AgentNamePrediction && name != consts.AgentNameReport {
-			subAgents = append(subAgents, agent)
-		}
+		subAgents = append(subAgents, agent)
+		subAgentNames = append(subAgentNames, name)
 	}
+
+	slog.Info("orchestrator.created",
+		"sub_agents", subAgentNames,
+		"sub_agents_count", len(subAgents),
+	)
+
+	// 构建详细的 description，包含路由规则
+	description := consts.BuildOrchestratorDescription(subAgentNames)
 
 	return flow.NewRoutingAgent(flow.RoutingConfig{
 		Name:        consts.AgentNameOrchestrator,
-		Description: consts.OrchestratorDescription,
+		Description: description,
 		Model:       orchestratorModel,
 		SubAgents:   subAgents,
 	})

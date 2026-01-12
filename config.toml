@@ -49,7 +49,7 @@ max_tokens = 4096
 temperature = 0.2
 
 [log]
-level = "warn"
+level = "info"
 format = "text"
 output = "oneblade.log" # or "stdout"
 

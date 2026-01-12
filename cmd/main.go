@@ -54,7 +54,7 @@ func main() {
 	memStore := application.MemoryStore()
 	var lastSavedIdx int
 
-	slog.Info("进入多轮对话模式，输入 quit/exit 退出。")
+	fmt.Println("进入多轮对话模式，输入 quit/exit 退出。")
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		fmt.Print("> ")

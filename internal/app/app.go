@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/go-kratos/blades"
@@ -101,16 +102,30 @@ func (a *Application) validateRules(cfg *config.Config) error {
 }
 
 func (a *Application) initServices() error {
+	slog.Info("app.init.services.start")
 	registry := service.NewRegistry()
 	if err := registry.InitFromConfig(a.cfg); err != nil {
 		return fmt.Errorf("init registry: %w", err)
 	}
 	a.registry = registry
-	a.registry = registry
+
+	services := registry.All()
+	serviceNames := make([]string, 0, len(services))
+	serviceTypes := make([]string, 0, len(services))
+	for _, s := range services {
+		serviceNames = append(serviceNames, s.Name())
+		serviceTypes = append(serviceTypes, string(s.Type()))
+	}
+	slog.Info("app.init.services.complete",
+		"count", len(services),
+		"services", serviceNames,
+		"types", serviceTypes,
+	)
 	return nil
 }
 
 func (a *Application) initModels(ctx context.Context) error {
+	slog.Info("app.init.models.start")
 	factory := llm.NewFactory()
 
 	for name, agentCfg := range a.agents {
@@ -119,11 +134,18 @@ func (a *Application) initModels(ctx context.Context) error {
 			return fmt.Errorf("build model for %s: %w", name, err)
 		}
 		a.modelReg.Register(name, m)
+		slog.Info("app.init.models.register",
+			"agent", name,
+			"provider", agentCfg.LLM.Provider,
+			"model", agentCfg.LLM.Model,
+		)
 	}
+	slog.Info("app.init.models.complete", "count", len(a.agents))
 	return nil
 }
 
 func (a *Application) initTools() ([]toolkit.Tool, error) {
+	slog.Info("app.init.tools.start")
 	memoryTool, err := memory.NewMemoryTool(a.memoryStore)
 	if err != nil {
 		return nil, fmt.Errorf("create memory tool: %w", err)
@@ -136,10 +158,20 @@ func (a *Application) initTools() ([]toolkit.Tool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create LoadContext tool: %w", err)
 	}
-	return []toolkit.Tool{memoryTool, saveTool, loadTool}, nil
+	tools := []toolkit.Tool{memoryTool, saveTool, loadTool}
+	toolNames := make([]string, 0, len(tools))
+	for _, t := range tools {
+		toolNames = append(toolNames, t.Name())
+	}
+	slog.Info("app.init.tools.complete",
+		"count", len(tools),
+		"tools", toolNames,
+	)
+	return tools, nil
 }
 
 func (a *Application) initOrchestrator() error {
+	slog.Info("app.init.orchestrator.start")
 	enabledAgents := make([]string, 0, len(a.agents))
 	for name := range a.agents {
 		enabledAgents = append(enabledAgents, name)
@@ -163,6 +195,9 @@ func (a *Application) initOrchestrator() error {
 	a.orchestrator = orchestrator
 
 	a.runner = agent.NewInspectionRunner(a.orchestrator)
+	slog.Info("app.init.orchestrator.complete",
+		"enabled_agents", enabledAgents,
+	)
 	return nil
 }
 
