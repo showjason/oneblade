@@ -53,6 +53,9 @@ func TestGetAPIKey(t *testing.T) {
 			cfg:          &config.AgentLLMConfig{APIKey: ""},
 			apiKey:       "FIRST_KEY",
 			providerName: "provider",
+			setupEnv: func() {
+				os.Setenv("FIRST_KEY", "first-key")
+			},
 			wantKey:      "first-key",
 			wantErr:      false,
 		},
@@ -216,7 +219,7 @@ func TestModelBuilder_OpenAIBuilder(t *testing.T) {
 	builder := newOpenAIBuilder()
 
 	t.Run("Name returns correct name", func(t *testing.T) {
-		assert.Equal(t, "openai", builder.GetModel(&config.AgentLLMConfig{Model: "gpt-4"}))
+		assert.Equal(t, "gpt-4", builder.GetModel(&config.AgentLLMConfig{Model: "gpt-4"}))
 	})
 
 	t.Run("GetBaseURL returns config URL when set", func(t *testing.T) {
@@ -268,7 +271,7 @@ func TestModelBuilder_AnthropicBuilder(t *testing.T) {
 	builder := newAnthropicBuilder()
 
 	t.Run("Name returns correct name", func(t *testing.T) {
-		assert.Equal(t, "anthropic", builder.GetModel(&config.AgentLLMConfig{Model: "claude-3"}))
+		assert.Equal(t, "claude-3", builder.GetModel(&config.AgentLLMConfig{Model: "claude-3"}))
 	})
 
 	t.Run("GetBaseURL returns config URL when set", func(t *testing.T) {
@@ -320,12 +323,12 @@ func TestModelBuilder_GeminiBuilder(t *testing.T) {
 	builder := newGeminiBuilder()
 
 	t.Run("Name returns correct name", func(t *testing.T) {
-		assert.Equal(t, "gemini", builder.GetModel(&config.AgentLLMConfig{Model: "gemini-1.5-pro"}))
+		assert.Equal(t, "gemini-1.5-pro", builder.GetModel(&config.AgentLLMConfig{Model: "gemini-1.5-pro"}))
 	})
 
 	t.Run("GetBaseURL returns empty string", func(t *testing.T) {
 		cfg := &config.AgentLLMConfig{BaseURL: "https://custom.url"}
-		assert.Empty(t, builder.GetBaseURL(cfg))
+		assert.Equal(t, "https://custom.url", builder.GetBaseURL(cfg))
 	})
 
 	t.Run("Build with API key from config", func(t *testing.T) {

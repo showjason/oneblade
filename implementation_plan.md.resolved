@@ -1,0 +1,43 @@
+# Implementation Plan - In-Memory Session with File Persistence Tool
+
+This plan implements session management using `blades` native in-memory capabilities for active conversations, supplemented by a tool for the Orchestrator to persist context to local files on demand.
+
+## User Review Required
+
+> [!NOTE]
+> The Orchestrator will hold the active conversation in memory (native `blades` behavior). The new tool allows it to "save game" to a local file.
+
+## Proposed Changes
+
+### Package `internal/session`
+
+#### [NEW] [manager.go](file:///Users/wenshuang.shao/SourceCode/myblade/oneblade/internal/session/manager.go)
+- Implement `SessionManager` to handle in-memory sessions.
+- Use `blades.NewSession()` natively.
+
+#### [NEW] [tools.go](file:///Users/wenshuang.shao/SourceCode/myblade/oneblade/internal/session/tools.go)
+- Implement `PersistenceTools` struct.
+- **Tool: `SaveContext`**:
+  - Input: `filename` (optional), `summary` (optional).
+  - Logic: Serializes the current in-memory session history and state to a local JSON file.
+- **Tool: `LoadContext`**:
+  - Input: `filename`.
+  - Logic: Loads history from file and appends it to the current in-memory session (or replaces it).
+
+### Package `cmd`
+
+#### [MODIFY] [main.go](file:///Users/wenshuang.shao/SourceCode/myblade/oneblade/cmd/main.go)
+- Initialize `SessionManager`.
+- Register `SaveContext` and `LoadContext` tools with the Orchestrator.
+- Update system prompt to inform Orchestrator about its ability to save/load context.
+
+## Verification Plan
+
+### Manual Verification
+1. Start CLI agent.
+2. Have a conversation.
+3. Instruct agent: "Save this conversation to 'chat1.json'".
+4. Verify `chat1.json` exists in local directory.
+5. Restart agent.
+6. Instruct agent: "Load context from 'chat1.json'".
+7. Ask a question about the previous session to verify context restoration.

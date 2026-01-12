@@ -3,14 +3,20 @@ package app
 import (
 	"context"
 	"fmt"
+	"log"
+	"log/slog"
+	"os"
 	"time"
 
 	"github.com/go-kratos/blades"
+	"github.com/go-kratos/blades/memory"
+	toolkit "github.com/go-kratos/blades/tools"
 
 	"github.com/oneblade/agent"
 	"github.com/oneblade/config"
 	"github.com/oneblade/internal/consts"
 	"github.com/oneblade/internal/llm"
+	"github.com/oneblade/internal/persistence"
 	"github.com/oneblade/service"
 
 	// registry imports services to register init functions
@@ -28,6 +34,7 @@ type Application struct {
 	modelReg     *llm.ModelRegistry
 	orchestrator blades.Agent
 	runner       *blades.Runner
+	memoryStore  memory.MemoryStore
 }
 
 func NewApplication(configPath string) (*Application, error) {
@@ -51,6 +58,9 @@ func (a *Application) Initialize(ctx context.Context) error {
 	if err := a.validateRules(cfg); err != nil {
 		return fmt.Errorf("validate app rules: %w", err)
 	}
+
+	// 2.1 初始化日志
+	a.initLogger(cfg)
 
 	// Cache enabled agents
 	a.agents = make(map[string]*config.AgentConfig)
@@ -111,7 +121,53 @@ func (a *Application) initServices() error {
 		return fmt.Errorf("init registry: %w", err)
 	}
 	a.registry = registry
+	a.registry = registry
 	return nil
+}
+
+func (a *Application) initLogger(cfg *config.Config) {
+	var level slog.Level
+	switch cfg.Log.Level {
+	case "debug":
+		level = slog.LevelDebug
+	case "info":
+		level = slog.LevelInfo
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
+	}
+
+	opts := &slog.HandlerOptions{
+		Level: level,
+	}
+
+	var writer *os.File = os.Stdout
+	if cfg.Log.Output != "" && cfg.Log.Output != "stdout" {
+		f, err := os.OpenFile(cfg.Log.Output, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to open log file %s: %v\n", cfg.Log.Output, err)
+		} else {
+			writer = f
+		}
+	}
+
+	var handler slog.Handler
+	if cfg.Log.Format == "json" {
+		handler = slog.NewJSONHandler(writer, opts)
+	} else {
+		handler = slog.NewTextHandler(writer, opts)
+	}
+
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+
+	// Redirect standard log to slog
+	// Note: slog.NewLogLogger returns a *log.Logger that writes to the handler
+	// We set it as the default standard logger
+	log.SetOutput(slog.NewLogLogger(handler, level).Writer())
 }
 
 func (a *Application) initModels(ctx context.Context) error {
@@ -133,11 +189,31 @@ func (a *Application) initOrchestrator() error {
 		enabledAgents = append(enabledAgents, name)
 	}
 
+	if a.memoryStore == nil {
+		a.memoryStore = memory.NewInMemoryStore()
+	}
+
+	memoryTool, err := memory.NewMemoryTool(a.memoryStore)
+	if err != nil {
+		return fmt.Errorf("create memory tool: %w", err)
+	}
+	saveTool, err := persistence.NewSaveContextTool()
+	if err != nil {
+		return fmt.Errorf("create SaveContext tool: %w", err)
+	}
+	loadTool, err := persistence.NewLoadContextTool()
+	if err != nil {
+		return fmt.Errorf("create LoadContext tool: %w", err)
+	}
+	orchestratorTools := []toolkit.Tool{memoryTool, saveTool, loadTool}
+
 	// 创建 Orchestrator Agent
 	orchestrator, err := agent.NewOrchestratorAgent(agent.OrchestratorConfig{
-		ModelRegistry: a.modelReg,
-		Services:      a.registry.All(),
-		EnabledAgents: enabledAgents,
+		ModelRegistry:          a.modelReg,
+		Services:               a.registry.All(),
+		EnabledAgents:          enabledAgents,
+		Tools:                  orchestratorTools,
+		ConversationMaxMessage: 50,
 	})
 	if err != nil {
 		return fmt.Errorf("create orchestrator failed: %w", err)
@@ -177,11 +253,15 @@ func (a *Application) Shutdown(ctx context.Context) error {
 }
 
 // Run 执行巡检任务
-func (a *Application) Run(ctx context.Context, input *blades.Message) (*blades.Message, error) {
+func (a *Application) Run(ctx context.Context, input *blades.Message, opts ...blades.RunOption) (*blades.Message, error) {
 	if a.runner == nil {
 		return nil, fmt.Errorf("application not initialized")
 	}
-	return a.runner.Run(ctx, input)
+	return a.runner.Run(ctx, input, opts...)
+}
+
+func (a *Application) MemoryStore() memory.MemoryStore {
+	return a.memoryStore
 }
 
 // ShutdownWithTimeout 带超时的优雅关闭

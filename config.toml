@@ -48,6 +48,11 @@ timeout = "60s"
 max_tokens = 4096
 temperature = 0.2
 
+[log]
+level = "warn"
+format = "text"
+output = "oneblade.log" # or "stdout"
+
 [server]
 addr = ":8080"
 timeout = "30s"

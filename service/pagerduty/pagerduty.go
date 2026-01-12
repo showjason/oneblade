@@ -135,7 +135,6 @@ type Incident struct {
 // === Logic ===
 
 func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
-	// 添加日志以追踪工具调用
 	log.Printf("[pagerduty] Handle called with operation: %s", req.Operation)
 
 	switch req.Operation {

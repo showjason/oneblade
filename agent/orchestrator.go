@@ -4,7 +4,8 @@ import (
 	"fmt"
 
 	"github.com/go-kratos/blades"
-	"github.com/go-kratos/blades/flow"
+	"github.com/go-kratos/blades/middleware"
+	toolkit "github.com/go-kratos/blades/tools"
 
 	"github.com/oneblade/internal/consts"
 	"github.com/oneblade/internal/llm"
@@ -13,9 +14,11 @@ import (
 
 // Orchestrator 编排 Agent 配置
 type OrchestratorConfig struct {
-	ModelRegistry *llm.ModelRegistry
-	Services      []service.Service
-	EnabledAgents []string
+	ModelRegistry          *llm.ModelRegistry
+	Services               []service.Service
+	EnabledAgents          []string
+	Tools                  []toolkit.Tool
+	ConversationMaxMessage int
 }
 
 // NewOrchestratorAgent 创建主编排 Agent
@@ -27,7 +30,6 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 	// 1. 获取 orchestrator model（已在 validateRules 中验证必须存在且启用）
 	orchestratorModel, _ := cfg.ModelRegistry.Get(consts.AgentNameOrchestrator)
 
-	// 2. 动态创建子 agent
 	agentMap := make(map[string]blades.Agent)
 	for _, agentName := range cfg.EnabledAgents {
 		// 跳过 orchestrator 自身
@@ -58,43 +60,30 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 		agentMap[agentName] = agent
 	}
 
-	// 4. 创建 analysisFlow 和最终的 SubAgents 列表
-	analysisAgent := newAnalysisFlow(agentMap)
-
-	subAgents := []blades.Agent{analysisAgent}
-	for _, agent := range agentMap {
-		subAgents = append(subAgents, agent)
+	allTools := make([]toolkit.Tool, 0, len(cfg.Tools)+len(agentMap))
+	if len(cfg.Tools) > 0 {
+		allTools = append(allTools, cfg.Tools...)
 	}
 
-	return flow.NewRoutingAgent(flow.RoutingConfig{
-		Name:        consts.AgentNameOrchestrator,
-		Description: consts.OrchestratorDescription,
-		Model:       orchestratorModel,
-		SubAgents:   subAgents,
-	})
-}
-
-// newAnalysisFlow creates the sequential analysis workflow
-func newAnalysisFlow(agents map[string]blades.Agent) blades.Agent {
-	// 按固定顺序添加启用的 agent
-	order := []string{
-		consts.AgentNameService,
-		consts.AgentNamePrediction,
-		consts.AgentNameReport,
+	for _, a := range agentMap {
+		// 使用框架提供的 NewAgentTool 将 agent 包装为工具
+		tool := blades.NewAgentTool(a)
+		allTools = append(allTools, tool)
 	}
 
-	var subAgents []blades.Agent
-	for _, name := range order {
-		if agent, ok := agents[name]; ok {
-			subAgents = append(subAgents, agent)
-		}
+	maxMessages := cfg.ConversationMaxMessage
+	if maxMessages <= 0 {
+		maxMessages = 50
 	}
 
-	return flow.NewSequentialAgent(flow.SequentialConfig{
-		Name:        consts.AgentNameAnalysis,
-		Description: consts.AnalysisAgentDescription,
-		SubAgents:   subAgents,
-	})
+	return blades.NewAgent(
+		consts.AgentNameOrchestrator,
+		blades.WithDescription(consts.OrchestratorDescription),
+		blades.WithInstruction(consts.OrchestratorInstruction),
+		blades.WithModel(orchestratorModel),
+		blades.WithTools(allTools...),
+		blades.WithMiddleware(middleware.ConversationBuffered(maxMessages)),
+	)
 }
 
 // NewInspectionRunner 创建巡检启动器

@@ -44,8 +44,16 @@ func (c *Config) GetAgentConfig(agentName string) (*AgentConfig, error) {
 type Config struct {
 	Server   ServerConfig             `toml:"server" validate:"required"`
 	Data     DataConfig               `toml:"data"`
+	Log      LogConfig                `toml:"log"`
 	Agents   map[string]AgentConfig   `toml:"agents" validate:"required,dive"`
 	Services map[string]ServiceConfig `toml:"services" validate:"required,dive"`
+}
+
+// LogConfig 日志配置
+type LogConfig struct {
+	Level  string `toml:"level" validate:"omitempty,oneof=debug info warn error"`
+	Format string `toml:"format" validate:"omitempty,oneof=text json"`
+	Output string `toml:"output"`
 }
 
 // ServerConfig 服务器配置

@@ -1,14 +1,19 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
-	"log"
+	"fmt"
+	"log/slog"
+	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/go-kratos/blades"
+	"github.com/go-kratos/blades/memory"
 
 	"github.com/oneblade/internal/app"
 )
@@ -25,40 +30,74 @@ func main() {
 	// 3. 构建应用
 	application, err := app.NewApplication(*configPath)
 	if err != nil {
-		log.Printf("failed to create application: %v", err)
+		slog.Error("failed to create application", "error", err)
 		return
 	}
 
 	// 4. 设置优雅关闭
 	defer func() {
-		log.Println("[main] shutting down...")
+		slog.Info("[main] shutting down...")
 		if err := application.ShutdownWithTimeout(5 * time.Second); err != nil {
-			log.Printf("shutdown error: %v", err)
+			slog.Error("shutdown error", "error", err)
 		}
 	}()
 
 	// 5. 初始化应用
 	if err := application.Initialize(ctx); err != nil {
-		log.Printf("failed to initialize application: %v", err)
+		slog.Error("failed to initialize application", "error", err)
 		return
 	}
 
-	log.Printf("[main] application initialized, config loaded from: %s", *configPath)
+	slog.Info("[main] application initialized", "config_path", *configPath)
 
-	// 6. 执行巡检
-	input := blades.UserMessage("请对过去24小时的系统状态进行全面巡检，生成巡检报告")
+	session := blades.NewSession()
+	memStore := application.MemoryStore()
+	var lastSavedIdx int
 
-	output, err := application.Run(ctx, input)
-	if err != nil {
-		// 检查是否是被中断
-		if ctx.Err() != nil {
-			log.Printf("[main] inspection interrupted: %v", ctx.Err())
-		} else {
-			log.Printf("failed to run inspection: %v", err)
+	slog.Info("进入多轮对话模式，输入 quit/exit 退出。")
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		fmt.Print("> ")
+		if !scanner.Scan() {
+			break
 		}
-		return
+		text := strings.TrimSpace(scanner.Text())
+		if text == "" {
+			continue
+		}
+		switch strings.ToLower(text) {
+		case "exit", "quit":
+			return
+		}
+
+		output, err := application.Run(ctx, blades.UserMessage(text), blades.WithSession(session))
+		if err != nil {
+			if ctx.Err() != nil {
+				slog.Error("[main] interrupted", "error", ctx.Err())
+				return
+			}
+			slog.Error("run failed", "error", err)
+			continue
+		}
+
+		fmt.Println(output.Text())
+
+		if memStore != nil {
+			history := session.History()
+			for _, m := range history[lastSavedIdx:] {
+				if m == nil {
+					continue
+				}
+				switch m.Role {
+				case blades.RoleUser, blades.RoleAssistant:
+					_ = memStore.AddMemory(ctx, &memory.Memory{Content: m})
+				}
+			}
+			lastSavedIdx = len(history)
+		}
 	}
 
-	log.Println("巡检报告:")
-	log.Println(output.Text())
+	if err := scanner.Err(); err != nil {
+		slog.Error("read stdin failed", "error", err)
+	}
 }

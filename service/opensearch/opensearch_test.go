@@ -54,13 +54,11 @@ func TestService_Handle_InvalidOp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := svc.Handle(context.Background(), Request{
+	_, err = svc.Handle(context.Background(), Request{
 		Operation: "invalid",
 	})
 	if err != nil {
-		t.Fatal(err)
+		return
 	}
-	if resp.Success {
-		t.Error("expected failure for invalid operation")
-	}
+	t.Fatal("expected error for invalid operation")
 }

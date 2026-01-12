@@ -1,0 +1,4 @@
+time=2026-01-12T14:32:44.111+09:00 level=ERROR msg="[main] interrupted" error="context canceled"
+time=2026-01-12T14:32:49.101+09:00 level=WARN msg="[service] initialized pagerduty"
+time=2026-01-12T14:41:01.528+09:00 level=WARN msg="[service] initialized pagerduty"
+time=2026-01-12T14:43:00.871+09:00 level=ERROR msg="[main] interrupted" error="context canceled"
