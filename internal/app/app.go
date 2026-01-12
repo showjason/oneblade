@@ -80,7 +80,12 @@ func (a *Application) Initialize(ctx context.Context) error {
 		return err
 	}
 
-	// 5. 初始化 Orchestrator
+	// 5. 初始化 Memory
+	if err := a.initMemory(); err != nil {
+		return err
+	}
+
+	// 6. 初始化 Orchestrator
 	if err := a.initOrchestrator(); err != nil {
 		return err
 	}
@@ -183,36 +188,47 @@ func (a *Application) initModels(ctx context.Context) error {
 	return nil
 }
 
+func (a *Application) initMemory() error {
+	if a.memoryStore == nil {
+		a.memoryStore = memory.NewInMemoryStore()
+	}
+	return nil
+}
+
+func (a *Application) initTools() ([]toolkit.Tool, error) {
+	memoryTool, err := memory.NewMemoryTool(a.memoryStore)
+	if err != nil {
+		return nil, fmt.Errorf("create memory tool: %w", err)
+	}
+	saveTool, err := persistence.NewSaveContextTool()
+	if err != nil {
+		return nil, fmt.Errorf("create SaveContext tool: %w", err)
+	}
+	loadTool, err := persistence.NewLoadContextTool()
+	if err != nil {
+		return nil, fmt.Errorf("create LoadContext tool: %w", err)
+	}
+	return []toolkit.Tool{memoryTool, saveTool, loadTool}, nil
+}
+
 func (a *Application) initOrchestrator() error {
 	enabledAgents := make([]string, 0, len(a.agents))
 	for name := range a.agents {
 		enabledAgents = append(enabledAgents, name)
 	}
 
-	if a.memoryStore == nil {
-		a.memoryStore = memory.NewInMemoryStore()
-	}
-
-	memoryTool, err := memory.NewMemoryTool(a.memoryStore)
+	// 初始化基础工具
+	baseTools, err := a.initTools()
 	if err != nil {
-		return fmt.Errorf("create memory tool: %w", err)
+		return err
 	}
-	saveTool, err := persistence.NewSaveContextTool()
-	if err != nil {
-		return fmt.Errorf("create SaveContext tool: %w", err)
-	}
-	loadTool, err := persistence.NewLoadContextTool()
-	if err != nil {
-		return fmt.Errorf("create LoadContext tool: %w", err)
-	}
-	orchestratorTools := []toolkit.Tool{memoryTool, saveTool, loadTool}
 
 	// 创建 Orchestrator Agent
 	orchestrator, err := agent.NewOrchestratorAgent(agent.OrchestratorConfig{
 		ModelRegistry:          a.modelReg,
 		Services:               a.registry.All(),
 		EnabledAgents:          enabledAgents,
-		Tools:                  orchestratorTools,
+		Tools:                  baseTools,
 		ConversationMaxMessage: 50,
 	})
 	if err != nil {

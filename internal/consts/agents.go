@@ -6,4 +6,5 @@ const (
 	AgentNamePrediction   = "prediction_agent"
 	AgentNameReport       = "report_agent"
 	AgentNameAnalysis     = "analysis_agent"
+	AgentNameGeneral      = "general_agent"
 )
