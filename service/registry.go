@@ -1,8 +1,9 @@
 package service
 
 import (
+	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 
 	"github.com/oneblade/config"
@@ -27,7 +28,7 @@ func RegisterService(serviceType ServiceType, factory ServiceFactory) {
 	defer factoryRegistry.mu.Unlock()
 
 	if _, exists := factoryRegistry.services[serviceType]; exists {
-		log.Printf("[service] warning: service factory for %s already registered", serviceType)
+		slog.Warn("service factory already registered", "type", serviceType)
 		return
 	}
 
@@ -74,12 +75,12 @@ func (r *Registry) InitFromConfig(loader *config.Loader) error {
 	for name, serviceCfg := range cfg.Services {
 		svc, err := r.initService(loader, name, serviceCfg)
 		if err != nil {
-			log.Printf("[service] error initializing %s: %v", name, err)
+			slog.Error("service initialization failed", "service", name, "error", err)
 			initErrors = append(initErrors, fmt.Errorf("service %s: %w", name, err))
 			continue
 		}
 		newServices[name] = svc
-		log.Printf("[service] initialized %s", name)
+		slog.Info("service initialized", "service", name, "type", serviceCfg.Type)
 	}
 
 	// Handle results
@@ -89,7 +90,10 @@ func (r *Registry) InitFromConfig(loader *config.Loader) error {
 	}
 
 	if len(initErrors) > 0 {
-		log.Printf("[service] warning: %d service(s) failed to initialize, %d succeeded", len(initErrors), successCount)
+		slog.Warn("some services failed to initialize",
+			"failed_count", len(initErrors),
+			"success_count", successCount,
+		)
 	}
 
 	// Update registry
@@ -166,8 +170,5 @@ func (r *Registry) Close() error {
 		}
 	}
 
-	if len(errs) > 0 {
-		return fmt.Errorf("close errors: %v", errs)
-	}
-	return nil
+	return errors.Join(errs...)
 }

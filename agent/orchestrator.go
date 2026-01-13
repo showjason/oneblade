@@ -2,35 +2,34 @@ package agent
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/go-kratos/blades"
 	"github.com/go-kratos/blades/flow"
+	toolkit "github.com/go-kratos/blades/tools"
 
 	"github.com/oneblade/internal/consts"
 	"github.com/oneblade/internal/llm"
 	"github.com/oneblade/service"
 )
 
-// Orchestrator 编排 Agent 配置
 type OrchestratorConfig struct {
-	ModelRegistry *llm.ModelRegistry
-	Services      []service.Service
-	EnabledAgents []string
+	ModelRegistry          *llm.ModelRegistry
+	Services               []service.Service
+	EnabledAgents          []string
+	Tools                  []toolkit.Tool
+	ConversationMaxMessage int
 }
 
-// NewOrchestratorAgent 创建主编排 Agent
 func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 	if cfg.ModelRegistry == nil {
 		return nil, fmt.Errorf("ModelRegistry is required")
 	}
 
-	// 1. 获取 orchestrator model（已在 validateRules 中验证必须存在且启用）
 	orchestratorModel, _ := cfg.ModelRegistry.Get(consts.AgentNameOrchestrator)
 
-	// 2. 动态创建子 agent
 	agentMap := make(map[string]blades.Agent)
 	for _, agentName := range cfg.EnabledAgents {
-		// 跳过 orchestrator 自身
 		if agentName == consts.AgentNameOrchestrator {
 			continue
 		}
@@ -49,34 +48,57 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 		case consts.AgentNameReport:
 			agent, err = NewReportAgent(ReportAgentConfig{Model: model})
 		default:
-			continue // 忽略未知的 agent 类型
+			continue
 		}
 
 		if err != nil {
 			return nil, err
 		}
 		agentMap[agentName] = agent
+		slog.Info("orchestrator.agent.created", "agent", agentName)
 	}
 
-	// 4. 创建 analysisFlow 和最终的 SubAgents 列表
+	// generalModel, _ := cfg.ModelRegistry.Get(consts.AgentNameGeneral)
+
+	// generalAgent, err := NewGeneralAgent(GeneralAgentConfig{
+	// 	Model: generalModel,
+	// 	Tools: cfg.Tools,
+	// })
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to create general agent: %v", err)
+	// }
+	// agentMap[consts.AgentNameGeneral] = generalAgent
 	analysisAgent := newAnalysisFlow(agentMap)
 
+	// 构建 subAgents 列表：包含所有独立的 agent 和 analysisAgent
+	// service_agent 需要单独列出，因为用户可能直接请求查询外部系统
 	subAgents := []blades.Agent{analysisAgent}
-	for _, agent := range agentMap {
+	subAgentNames := []string{consts.AgentNameAnalysis}
+
+	// 添加所有独立的 agent（包括 service_agent、prediction_agent、report_agent）
+	// 这样 RoutingAgent 可以直接路由到它们，而不需要经过 analysisAgent
+	for name, agent := range agentMap {
 		subAgents = append(subAgents, agent)
+		subAgentNames = append(subAgentNames, name)
 	}
+
+	slog.Info("orchestrator.created",
+		"sub_agents", subAgentNames,
+		"sub_agents_count", len(subAgents),
+	)
+
+	// 构建详细的 description，包含路由规则
+	description := consts.BuildOrchestratorDescription(subAgentNames)
 
 	return flow.NewRoutingAgent(flow.RoutingConfig{
 		Name:        consts.AgentNameOrchestrator,
-		Description: consts.OrchestratorDescription,
+		Description: description,
 		Model:       orchestratorModel,
 		SubAgents:   subAgents,
 	})
 }
 
-// newAnalysisFlow creates the sequential analysis workflow
 func newAnalysisFlow(agents map[string]blades.Agent) blades.Agent {
-	// 按固定顺序添加启用的 agent
 	order := []string{
 		consts.AgentNameService,
 		consts.AgentNamePrediction,
@@ -97,7 +119,6 @@ func newAnalysisFlow(agents map[string]blades.Agent) blades.Agent {
 	})
 }
 
-// NewInspectionRunner 创建巡检启动器
 func NewInspectionRunner(orchestrator blades.Agent) *blades.Runner {
 	return blades.NewRunner(orchestrator, blades.WithResumable(true))
 }

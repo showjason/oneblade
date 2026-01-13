@@ -20,7 +20,7 @@ func newGeminiBuilder() ModelBuilder {
 	return &geminiBuilder{
 		baseURL: "https://generativelanguage.googleapis.com/",
 		model:   "gemini-2.5-flash",
-		apiKey:  "GEMINI_API_KEY",
+		apiKey:  "GEMINI_API_KEY,GOOGLE_API_KEY",
 	}
 }
 
@@ -45,5 +45,5 @@ func (b *geminiBuilder) Build(ctx context.Context, cfg *config.AgentLLMConfig) (
 	opts.MaxOutputTokens = int32(*cfg.MaxTokens)
 	opts.Temperature = float32(*cfg.Temperature)
 
-	return gemini.NewModel(ctx, resolveModel(cfg, b.GetModel(cfg)), opts)
+	return gemini.NewModel(ctx, b.GetModel(cfg), opts)
 }

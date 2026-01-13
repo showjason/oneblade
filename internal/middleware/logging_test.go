@@ -5,76 +5,100 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/go-kratos/blades"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestLogging(t *testing.T) {
-	// Create a mock next function
-	called := false
-	var receivedReq interface{}
-	var receivedCtx context.Context
-
-	next := func(ctx context.Context, req interface{}) (interface{}, error) {
-		called = true
-		receivedReq = req
-		receivedCtx = ctx
-		return "response", nil
-	}
-
-	// Wrap with logging middleware
-	loggingMiddleware := Logging(next)
-
-	// Call the middleware
-	ctx := context.Background()
-	req := "test request"
-	res, err := loggingMiddleware(ctx, req)
-
-	// Verify next was called
-	require.True(t, called, "next function should be called")
-	assert.Equal(t, req, receivedReq)
-	assert.Equal(t, ctx, receivedCtx)
-	assert.Equal(t, "response", res)
-	assert.NoError(t, err)
+type testAgent struct {
+	name string
 }
 
-func TestLogging_WithError(t *testing.T) {
-	// Create a mock next function that returns an error
-	testError := errors.New("test error")
-	next := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return nil, testError
-	}
-
-	// Wrap with logging middleware
-	loggingMiddleware := Logging(next)
-
-	// Call the middleware
-	ctx := context.Background()
-	req := "test request"
-	res, err := loggingMiddleware(ctx, req)
-
-	// Verify error is propagated
-	assert.Nil(t, res)
-	assert.Error(t, err)
-	assert.Equal(t, testError, err)
+func (a testAgent) Name() string        { return a.name }
+func (a testAgent) Description() string { return "test" }
+func (a testAgent) Run(context.Context, *blades.Invocation) blades.Generator[*blades.Message, error] {
+	return func(func(*blades.Message, error) bool) {}
 }
 
-func TestLogging_ContextPreserved(t *testing.T) {
-	// Create a mock next function
-	next := func(ctx context.Context, req interface{}) (interface{}, error) {
-		// Verify context is preserved
-		value := ctx.Value("test-key")
-		assert.Equal(t, "test-value", value)
-		return "response", nil
+func TestNewAgentLogging_Passthrough(t *testing.T) {
+	next := blades.HandleFunc(func(ctx context.Context, inv *blades.Invocation) blades.Generator[*blades.Message, error] {
+		return func(yield func(*blades.Message, error) bool) {
+			yield(blades.AssistantMessage("response"), nil)
+		}
+	})
+
+	h := NewAgentLogging(next)
+	ctx := blades.NewAgentContext(context.Background(), testAgent{name: "test-agent"})
+	inv := &blades.Invocation{
+		ID:      "inv-1",
+		Model:   "m",
+		Message: blades.UserMessage("hello"),
 	}
 
-	// Wrap with logging middleware
-	loggingMiddleware := Logging(next)
+	var got []*blades.Message
+	for msg, err := range h.Handle(ctx, inv) {
+		require.NoError(t, err)
+		require.NotNil(t, msg)
+		got = append(got, msg)
+	}
+	require.Len(t, got, 1)
+	assert.Equal(t, "response", got[0].Text())
+}
 
-	// Call the middleware with context containing a value
-	ctx := context.WithValue(context.Background(), "test-key", "test-value")
-	req := "test request"
-	_, err := loggingMiddleware(ctx, req)
+func TestNewAgentLogging_ToolMessagePassthrough(t *testing.T) {
+	toolMsg := &blades.Message{
+		ID:   "m1",
+		Role: blades.RoleTool,
+		Parts: []blades.Part{
+			blades.ToolPart{ID: "t1", Name: "ToolX", Request: `{"a":1}`, Response: `{"ok":true}`},
+		},
+	}
 
-	assert.NoError(t, err)
+	next := blades.HandleFunc(func(ctx context.Context, inv *blades.Invocation) blades.Generator[*blades.Message, error] {
+		return func(yield func(*blades.Message, error) bool) {
+			if !yield(toolMsg, nil) {
+				return
+			}
+			yield(blades.AssistantMessage("done"), nil)
+		}
+	})
+
+	h := NewAgentLogging(next)
+	ctx := blades.NewAgentContext(context.Background(), testAgent{name: "test-agent"})
+	inv := &blades.Invocation{
+		ID:      "inv-2",
+		Model:   "m",
+		Message: blades.UserMessage("hello"),
+	}
+
+	var texts []string
+	for msg, err := range h.Handle(ctx, inv) {
+		require.NoError(t, err)
+		require.NotNil(t, msg)
+		texts = append(texts, msg.Text())
+	}
+	require.Equal(t, []string{"", "done"}, texts)
+}
+
+func TestNewAgentLogging_ErrorPassthrough(t *testing.T) {
+	testErr := errors.New("boom")
+	next := blades.HandleFunc(func(ctx context.Context, inv *blades.Invocation) blades.Generator[*blades.Message, error] {
+		return func(yield func(*blades.Message, error) bool) {
+			yield(nil, testErr)
+		}
+	})
+
+	h := NewAgentLogging(next)
+	ctx := blades.NewAgentContext(context.Background(), testAgent{name: "test-agent"})
+	inv := &blades.Invocation{
+		ID:      "inv-3",
+		Model:   "m",
+		Message: blades.UserMessage("hello"),
+	}
+
+	var gotErr error
+	for _, err := range h.Handle(ctx, inv) {
+		gotErr = err
+	}
+	require.ErrorIs(t, gotErr, testErr)
 }
