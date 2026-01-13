@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -169,8 +170,5 @@ func (r *Registry) Close() error {
 		}
 	}
 
-	if len(errs) > 0 {
-		return fmt.Errorf("close errors: %v", errs)
-	}
-	return nil
+	return errors.Join(errs...)
 }

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -212,24 +213,21 @@ func (a *Application) initOrchestrator() error {
 }
 
 func (a *Application) Shutdown(ctx context.Context) error {
-	var errs []error
+	var err1, err2 error
 
 	if a.registry != nil {
 		if err := a.registry.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("close registry: %w", err))
+			err1 = fmt.Errorf("close registry: %w", err)
 		}
 	}
 
 	if a.modelReg != nil {
 		if err := a.modelReg.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("close models: %w", err))
+			err2 = fmt.Errorf("close models: %w", err)
 		}
 	}
 
-	if len(errs) > 0 {
-		return fmt.Errorf("shutdown errors: %v", errs)
-	}
-	return nil
+	return errors.Join(err1, err2)
 }
 
 func (a *Application) Run(ctx context.Context, input *blades.Message, opts ...blades.RunOption) (*blades.Message, error) {

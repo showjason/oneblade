@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -53,8 +54,5 @@ func (r *ModelRegistry) Close() error {
 		}
 	}
 
-	if len(errs) > 0 {
-		return fmt.Errorf("close models errors: %v", errs)
-	}
-	return nil
+	return errors.Join(errs...)
 }
