@@ -40,6 +40,9 @@ func NewServiceAgent(cfg ServiceAgent) (blades.Agent, error) {
 		blades.WithInstruction(instruction),
 		blades.WithModel(cfg.Model),
 		blades.WithTools(serviceTools...),
-		blades.WithMiddleware(middleware.NewAgentLogging),
+		blades.WithMiddleware(
+			middleware.NewAgentLogging,
+			middleware.LoadSessionHistory(),
+		),
 	)
 }

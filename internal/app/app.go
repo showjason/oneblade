@@ -213,21 +213,21 @@ func (a *Application) initOrchestrator() error {
 }
 
 func (a *Application) Shutdown(ctx context.Context) error {
-	var err1, err2 error
+	var registryError, modelError error
 
 	if a.registry != nil {
 		if err := a.registry.Close(); err != nil {
-			err1 = fmt.Errorf("close registry: %w", err)
+			registryError = fmt.Errorf("close registry: %w", err)
 		}
 	}
 
 	if a.modelReg != nil {
 		if err := a.modelReg.Close(); err != nil {
-			err2 = fmt.Errorf("close models: %w", err)
+			modelError = fmt.Errorf("close models: %w", err)
 		}
 	}
 
-	return errors.Join(err1, err2)
+	return errors.Join(registryError, modelError)
 }
 
 func (a *Application) Run(ctx context.Context, input *blades.Message, opts ...blades.RunOption) (*blades.Message, error) {

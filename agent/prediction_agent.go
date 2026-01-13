@@ -17,6 +17,9 @@ func NewPredictionAgent(cfg PredictionAgentConfig) (blades.Agent, error) {
 		blades.WithDescription(consts.PredictionAgentDescription),
 		blades.WithInstruction(consts.PredictionAgentInstruction),
 		blades.WithModel(cfg.Model),
-		blades.WithMiddleware(middleware.NewAgentLogging),
+		blades.WithMiddleware(
+			middleware.NewAgentLogging,
+			middleware.LoadSessionHistory(),
+		),
 	)
 }

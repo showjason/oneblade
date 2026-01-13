@@ -26,6 +26,9 @@ func NewGeneralAgent(cfg GeneralAgentConfig) (blades.Agent, error) {
 		blades.WithInstruction(consts.GeneralAgentInstruction),
 		blades.WithModel(cfg.Model),
 		blades.WithTools(cfg.Tools...),
-		blades.WithMiddleware(middleware.NewAgentLogging),
+		blades.WithMiddleware(
+			middleware.NewAgentLogging,
+			middleware.LoadSessionHistory(),
+		),
 	)
 }

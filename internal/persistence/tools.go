@@ -32,7 +32,7 @@ type LoadContextResponse struct {
 }
 
 func NewSaveContextTool() (tools.Tool, error) {
-	return tools.NewFunc[SaveContextRequest, SaveContextResponse](
+	return tools.NewFunc(
 		"SaveContext",
 		"Save the current conversation context (session history + state) into a local markdown file. The file is human readable and contains an embedded JSON dump for loading.",
 		func(ctx context.Context, req SaveContextRequest) (SaveContextResponse, error) {
@@ -71,7 +71,7 @@ func NewSaveContextTool() (tools.Tool, error) {
 }
 
 func NewLoadContextTool() (tools.Tool, error) {
-	return tools.NewFunc[LoadContextRequest, LoadContextResponse](
+	return tools.NewFunc(
 		"LoadContext",
 		"Load conversation context from a local markdown file that contains an embedded JSON dump, and append it to the current session. Note: loaded history affects subsequent turns.",
 		func(ctx context.Context, req LoadContextRequest) (LoadContextResponse, error) {
@@ -145,4 +145,3 @@ func DecodeLoadContextResponse(raw string) (LoadContextResponse, error) {
 	}
 	return resp, nil
 }
-

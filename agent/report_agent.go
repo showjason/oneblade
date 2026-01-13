@@ -17,6 +17,9 @@ func NewReportAgent(cfg ReportAgentConfig) (blades.Agent, error) {
 		blades.WithDescription(consts.ReportAgentDescription),
 		blades.WithInstruction(consts.ReportAgentInstruction),
 		blades.WithModel(cfg.Model),
-		blades.WithMiddleware(middleware.NewAgentLogging),
+		blades.WithMiddleware(
+			middleware.NewAgentLogging,
+			middleware.LoadSessionHistory(),
+		),
 	)
 }
