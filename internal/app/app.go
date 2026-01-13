@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/go-kratos/blades"
@@ -70,6 +71,10 @@ func (a *Application) Initialize(ctx context.Context) error {
 		return err
 	}
 
+	if err := a.initMemoryStore(); err != nil {
+		return err
+	}
+
 	if err := a.initOrchestrator(); err != nil {
 		return err
 	}
@@ -78,8 +83,6 @@ func (a *Application) Initialize(ctx context.Context) error {
 }
 
 func (a *Application) validateRules(cfg *config.Config) error {
-	subAgentNames := []string{consts.AgentNameService, consts.AgentNamePrediction, consts.AgentNameReport}
-
 	orchestrator, ok := cfg.Agents[consts.AgentNameOrchestrator]
 	if !ok {
 		return fmt.Errorf("orchestrator agent %s is required but not found", consts.AgentNameOrchestrator)
@@ -89,13 +92,14 @@ func (a *Application) validateRules(cfg *config.Config) error {
 	}
 
 	enabledSubAgents := 0
-	for _, name := range subAgentNames {
+	for _, name := range consts.RequiredSubAgents {
 		if agent, ok := cfg.Agents[name]; ok && agent.Enabled {
 			enabledSubAgents++
 		}
 	}
 	if enabledSubAgents == 0 {
-		return fmt.Errorf("at least one sub agent (%s, %s, %s) must be enabled", consts.AgentNameService, consts.AgentNamePrediction, consts.AgentNameReport)
+		agentNames := strings.Join(consts.RequiredSubAgents, ", ")
+		return fmt.Errorf("at least one sub agent (%s) must be enabled", agentNames)
 	}
 
 	return nil
@@ -141,6 +145,12 @@ func (a *Application) initModels(ctx context.Context) error {
 		)
 	}
 	slog.Info("app.init.models.complete", "count", len(a.agents))
+	return nil
+}
+
+func (a *Application) initMemoryStore() error {
+	a.memoryStore = memory.NewInMemoryStore()
+	slog.Info("app.init.memory.store.complete", "type", "in-memory")
 	return nil
 }
 
