@@ -18,6 +18,8 @@ import (
 	"github.com/oneblade/internal/llm"
 	"github.com/oneblade/internal/logger"
 	"github.com/oneblade/internal/persistence"
+	"github.com/oneblade/internal/session"
+	"github.com/oneblade/internal/summary"
 	"github.com/oneblade/service"
 
 	_ "github.com/oneblade/service/opensearch"
@@ -235,6 +237,32 @@ func (a *Application) Run(ctx context.Context, input *blades.Message, opts ...bl
 		return nil, fmt.Errorf("application not initialized")
 	}
 	return a.runner.Run(ctx, input, opts...)
+}
+
+func (a *Application) NewSession() (blades.Session, error) {
+	cfg, err := a.cfg.Get()
+	if err != nil {
+		return nil, fmt.Errorf("get config: %w", err)
+	}
+
+	modelName := cfg.Conversation.SummaryModelAgent
+	model, err := a.modelReg.Get(modelName)
+	if err != nil {
+		return nil, fmt.Errorf("get model %s: %w", modelName, err)
+	}
+
+	s, err := summary.NewSummarizer(summary.Config{
+		Model:           model,
+		MaxOutputTokens: cfg.Conversation.SummaryMaxOutputTokens,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create summarizer: %w", err)
+	}
+
+	return session.NewManagedSession(session.ManagedSessionConfig{
+		Conversation: cfg.Conversation,
+		Summarizer:   s,
+	})
 }
 
 func (a *Application) MemoryStore() memory.MemoryStore {
