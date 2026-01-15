@@ -50,7 +50,11 @@ func main() {
 
 	slog.Info("[main] application initialized", "config_path", *configPath)
 
-	session := blades.NewSession()
+	session, err := application.NewSession()
+	if err != nil {
+		slog.Error("failed to create session", "error", err)
+		return
+	}
 	memStore := application.MemoryStore()
 	var lastSavedIdx int
 

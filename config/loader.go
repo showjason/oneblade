@@ -2,11 +2,13 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"regexp"
 
 	"github.com/BurntSushi/toml"
 	"github.com/go-playground/validator/v10"
+	"github.com/oneblade/internal/consts"
 )
 
 // Loader 配置加载器
@@ -55,8 +57,14 @@ func (l *Loader) Load() (*Config, error) {
 		return nil, err
 	}
 
+	applyDefaults(&cfg)
+
 	// 验证配置结构
 	if err := l.validate(&cfg); err != nil {
+		return nil, fmt.Errorf("validate config: %w", err)
+	}
+
+	if err := validateConversation(cfg.Conversation); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
 
@@ -69,6 +77,46 @@ func (l *Loader) Load() (*Config, error) {
 
 	l.config = &cfg
 	return &cfg, nil
+}
+
+func applyDefaults(cfg *Config) {
+	if cfg.Conversation.ContextWindowTokens == 0 {
+		slog.Warn("conversation.context_window_tokens is 0, using default value",
+			"default", DefaultContextWindowTokens)
+		cfg.Conversation.ContextWindowTokens = DefaultContextWindowTokens
+	}
+	if cfg.Conversation.CompressionThreshold == 0 {
+		slog.Warn("conversation.compression_threshold is 0, using default value",
+			"default", DefaultCompressionThreshold)
+		cfg.Conversation.CompressionThreshold = DefaultCompressionThreshold
+	}
+	if cfg.Conversation.MaxInContextMessages == 0 {
+		slog.Warn("conversation.max_in_context_messages is 0, using default value",
+			"default", DefaultMaxInContextMessages)
+		cfg.Conversation.MaxInContextMessages = DefaultMaxInContextMessages
+	}
+	if cfg.Conversation.RetainRecentMessages == 0 {
+		slog.Warn("conversation.retain_recent_messages is 0, using default value",
+			"default", DefaultRetainRecentMessages)
+		cfg.Conversation.RetainRecentMessages = DefaultRetainRecentMessages
+	}
+	if cfg.Conversation.SummaryMaxOutputTokens == 0 {
+		slog.Warn("conversation.summary_max_output_tokens is 0, using default value",
+			"default", DefaultSummaryMaxOutputTokens)
+		cfg.Conversation.SummaryMaxOutputTokens = DefaultSummaryMaxOutputTokens
+	}
+	if cfg.Conversation.SummaryModelAgent == "" {
+		slog.Warn("conversation.summary_model_agent is empty, using default value",
+			"default", consts.AgentNameOrchestrator)
+		cfg.Conversation.SummaryModelAgent = consts.AgentNameOrchestrator
+	}
+}
+
+func validateConversation(cfg ConversationConfig) error {
+	if cfg.RetainRecentMessages >= cfg.MaxInContextMessages {
+		return fmt.Errorf("conversation.retain_recent_messages must be < conversation.max_in_context_messages")
+	}
+	return nil
 }
 
 // checkUnknownKeys checks for undecoded keys in the config

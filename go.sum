@@ -44,10 +44,6 @@ github.com/gabriel-vasile/mimetype v1.4.12 h1:e9hWvmLYvtp846tLHam2o++qitpguFiYCK
 github.com/gabriel-vasile/mimetype v1.4.12/go.mod h1:d+9Oxyo1wTzWdyVUPMmXFvp4F9tea18J8ufA774AB3s=
 github.com/go-kratos/blades v0.3.1 h1:y7yZgiFa8FW1tlKtYXCk4fQGxVKMh7EvOvM6XnrfQXA=
 github.com/go-kratos/blades v0.3.1/go.mod h1:Wd/q3Z/eAbUFyTxJdVEpNObA+4yK8G7+1+hscS8Dtf4=
-github.com/go-kratos/blades/contrib/anthropic v0.3.0 h1:p7lG1TlDVxvO6kqpiPkMlIdCGKu/sujXm5tmDUTeDyc=
-github.com/go-kratos/blades/contrib/anthropic v0.3.0/go.mod h1:9LoLCCRjIwZbilGCpk8CfXVaXCLqsTt9yXnY4hDwI/k=
-github.com/go-kratos/blades/contrib/gemini v0.3.0 h1:t+hPQaJqOlqnB/k965TKJfAbRid//Uvz0HMSW4Zma+Y=
-github.com/go-kratos/blades/contrib/gemini v0.3.0/go.mod h1:IVd3fRwUlvuV8ckV/p3bkkvzRMOsRXioO1g0Jtjln9w=
 github.com/go-kratos/blades/contrib/openai v0.3.0 h1:lZQy3N+KiT0IeB6e9HaXJ6idD8tkzocTryc907BYJLM=
 github.com/go-kratos/blades/contrib/openai v0.3.0/go.mod h1:DrUkaJa5M1Hx+kDoWHJtnhymGJF2VFx/ZPrwhq9ifIw=
 github.com/go-kratos/kit v0.0.0-20251121083925-65298ad2aa44 h1:T2JdBeiSLO+WUmMW4WF32SmS7TtUYGshDlL0+iFoUJg=
