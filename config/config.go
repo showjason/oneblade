@@ -40,13 +40,43 @@ func (c *Config) GetAgentConfig(agentName string) (*AgentConfig, error) {
 	return &acfg, nil
 }
 
+// ConversationConfig 会话级上下文控制配置
+//
+// 说明：
+// - 这些配置不属于“某个 agent 的模型参数”，而是会话历史管理策略。
+// - Loader 负责填充默认值并做跨字段约束校验（如 RetainRecentMessages < MaxInContextMessages）。
+type ConversationConfig struct {
+	// ContextWindowTokens 模型上下文窗口（token）
+	ContextWindowTokens int `toml:"context_window_tokens" validate:"omitempty,gt=0"`
+	// CompressionThreshold 触发压缩阈值 (0, 1]
+	CompressionThreshold float64 `toml:"compression_threshold" validate:"omitempty,gt=0,lte=1"`
+	// MaxInContextMessages 最大消息数阈值
+	MaxInContextMessages int `toml:"max_in_context_messages" validate:"omitempty,gt=0"`
+	// RetainRecentMessages 触发压缩后保留的尾部消息数
+	RetainRecentMessages int `toml:"retain_recent_messages" validate:"omitempty,gt=0"`
+	// SummaryMaxOutputTokens 摘要生成的最大输出 token
+	SummaryMaxOutputTokens int `toml:"summary_max_output_tokens" validate:"omitempty,gt=0"`
+	// SummaryModelAgent 使用哪个已注册的 agent 模型进行摘要（通过 ModelRegistry 获取）
+	SummaryModelAgent string `toml:"summary_model_agent" validate:"omitempty"`
+}
+
+// ConversationConfig 默认值常量
+const (
+	DefaultContextWindowTokens    = 128000
+	DefaultCompressionThreshold   = 0.8
+	DefaultMaxInContextMessages   = 50
+	DefaultRetainRecentMessages   = 16
+	DefaultSummaryMaxOutputTokens = 768
+)
+
 // Config 根配置结构
 type Config struct {
-	Server   ServerConfig             `toml:"server" validate:"required"`
-	Data     DataConfig               `toml:"data"`
-	Log      LogConfig                `toml:"log"`
-	Agents   map[string]AgentConfig   `toml:"agents" validate:"required,dive"`
-	Services map[string]ServiceConfig `toml:"services" validate:"required,dive"`
+	Server       ServerConfig             `toml:"server" validate:"required"`
+	Data         DataConfig               `toml:"data"`
+	Log          LogConfig                `toml:"log"`
+	Conversation ConversationConfig       `toml:"conversation"`
+	Agents       map[string]AgentConfig   `toml:"agents" validate:"required,dive"`
+	Services     map[string]ServiceConfig `toml:"services" validate:"required,dive"`
 }
 
 // LogConfig 日志配置

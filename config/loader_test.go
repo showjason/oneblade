@@ -523,6 +523,29 @@ enabled = true
 			"错误消息应该包含 Addr 或 addr: %s", err.Error())
 	})
 
+	t.Run("conversation.retain_recent_messages 必须小于 max_in_context_messages", func(t *testing.T) {
+		configContent := testAgentConfig + `
+[server]
+addr = "localhost:8080"
+
+[conversation]
+max_in_context_messages = 10
+retain_recent_messages = 10
+
+[services.prometheus]
+type = "prometheus"
+enabled = true
+`
+		configPath := createTempConfig(t, configContent)
+
+		loader := NewLoader(configPath)
+
+		_, err := loader.Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "validate config")
+		assert.True(t, containsAny(err.Error(), []string{"retain_recent_messages", "retain"}), err.Error())
+	})
+
 	t.Run("无效的 hostname_port 格式", func(t *testing.T) {
 		configContent := testAgentConfig + `
 [server]
