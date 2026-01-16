@@ -81,32 +81,32 @@ func (l *Loader) Load() (*Config, error) {
 
 func applyDefaults(cfg *Config) {
 	if cfg.Conversation.ContextWindowTokens == 0 {
-		slog.Warn("conversation.context_window_tokens is 0, using default value",
+		slog.Debug("conversation.context_window_tokens is 0, using default value",
 			"default", DefaultContextWindowTokens)
 		cfg.Conversation.ContextWindowTokens = DefaultContextWindowTokens
 	}
 	if cfg.Conversation.CompressionThreshold == 0 {
-		slog.Warn("conversation.compression_threshold is 0, using default value",
+		slog.Debug("conversation.compression_threshold is 0, using default value",
 			"default", DefaultCompressionThreshold)
 		cfg.Conversation.CompressionThreshold = DefaultCompressionThreshold
 	}
 	if cfg.Conversation.MaxInContextMessages == 0 {
-		slog.Warn("conversation.max_in_context_messages is 0, using default value",
+		slog.Debug("conversation.max_in_context_messages is 0, using default value",
 			"default", DefaultMaxInContextMessages)
 		cfg.Conversation.MaxInContextMessages = DefaultMaxInContextMessages
 	}
 	if cfg.Conversation.RetainRecentMessages == 0 {
-		slog.Warn("conversation.retain_recent_messages is 0, using default value",
+		slog.Debug("conversation.retain_recent_messages is 0, using default value",
 			"default", DefaultRetainRecentMessages)
 		cfg.Conversation.RetainRecentMessages = DefaultRetainRecentMessages
 	}
 	if cfg.Conversation.SummaryMaxOutputTokens == 0 {
-		slog.Warn("conversation.summary_max_output_tokens is 0, using default value",
+		slog.Debug("conversation.summary_max_output_tokens is 0, using default value",
 			"default", DefaultSummaryMaxOutputTokens)
 		cfg.Conversation.SummaryMaxOutputTokens = DefaultSummaryMaxOutputTokens
 	}
 	if cfg.Conversation.SummaryModelAgent == "" {
-		slog.Warn("conversation.summary_model_agent is empty, using default value",
+		slog.Debug("conversation.summary_model_agent is empty, using default value",
 			"default", consts.AgentNameOrchestrator)
 		cfg.Conversation.SummaryModelAgent = consts.AgentNameOrchestrator
 	}

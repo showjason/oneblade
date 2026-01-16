@@ -35,17 +35,17 @@ func DefaultTranscriptDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("get home dir: %w", err)
 	}
-	return filepath.Join(homeDir, ".oneblade"), nil
+	return filepath.Join(homeDir, ".oneblade", "sessions"), nil
 }
 
 // NewFileTranscriptWriter creates a new FileTranscriptWriter that saves
-// transcripts to ~/.oneblade/<sessionID>.md.
+// transcripts to ~/.oneblade/sessions/<sessionID>.md.
 func NewFileTranscriptWriter(sessionID string) (*FileTranscriptWriter, error) {
 	return NewFileTranscriptWriterWithDir(sessionID, "")
 }
 
 // NewFileTranscriptWriterWithDir creates a new FileTranscriptWriter with a custom directory.
-// If dir is empty, it uses the default ~/.oneblade/ directory.
+// If dir is empty, it uses the default ~/.oneblade/sessions/ directory.
 func NewFileTranscriptWriterWithDir(sessionID, dir string) (*FileTranscriptWriter, error) {
 	if sessionID == "" {
 		return nil, fmt.Errorf("session ID is required")

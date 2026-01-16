@@ -114,6 +114,9 @@ func (s *ManagedSession) Append(ctx context.Context, message *blades.Message) er
 	tail := make([]*blades.Message, len(s.history)-cutoff)
 	copy(tail, s.history[cutoff:])
 
+	// 记录解锁时的 history 长度，用于检测并发追加
+	historyLenBeforeUnlock := len(s.history)
+
 	previousSummary, _ := s.state[StateKeyConversationSummary].(string)
 	s.mu.Unlock()
 
@@ -123,10 +126,18 @@ func (s *ManagedSession) Append(ctx context.Context, message *blades.Message) er
 	}
 
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 检查在解锁期间是否有新消息被追加
+	if len(s.history) > historyLenBeforeUnlock {
+		// 有新消息，需要将它们合并到 tail 中
+		newMessages := s.history[historyLenBeforeUnlock:]
+		tail = append(tail, newMessages...)
+	}
+
 	s.state[StateKeyConversationSummary] = newSummary
 	s.state[StateKeySummaryUpdatedAt] = time.Now().UTC().Format(time.RFC3339Nano)
 	s.history = tail
-	s.mu.Unlock()
 
 	return nil
 }

@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"strings"
+	"text/template"
 
 	"github.com/go-kratos/blades"
 	"github.com/google/jsonschema-go/jsonschema"
@@ -131,28 +131,40 @@ func NewRoutingAgent(config RoutingConfig) (blades.Agent, error) {
 func (a *routingAgent) Run(ctx context.Context, invocation *blades.Invocation) blades.Generator[*blades.Message, error] {
 	return func(yield func(*blades.Message, error) bool) {
 		var (
-			err         error
 			targetAgent string
-			message     *blades.Message
+			lastMessage *blades.Message
 		)
-		for message, err = range a.Agent.Run(ctx, invocation) {
+		for message, err := range a.Agent.Run(ctx, invocation) {
 			if err != nil {
 				yield(nil, err)
 				return
 			}
+			// Check for handoff action
 			if target, ok := message.Actions[actionHandoffToAgent]; ok {
 				targetAgent, _ = target.(string)
+				lastMessage = message
 				break
 			}
+			// Yield intermediate messages to preserve streaming
+			if !yield(message, nil) {
+				return
+			}
+			lastMessage = message
 		}
 		agent, ok := a.targets[targetAgent]
 		if !ok {
-			if message != nil && message.Text() != "" {
-				yield(message, nil)
+			// No handoff occurred, the last message was already yielded in the loop
+			if targetAgent == "" {
 				return
 			}
 			yield(nil, fmt.Errorf("target agent not found: %s", targetAgent))
 			return
+		}
+		// If handoff message has text content, yield it before switching
+		if lastMessage != nil && lastMessage.Text() != "" {
+			if !yield(lastMessage, nil) {
+				return
+			}
 		}
 		for message, err := range agent.Run(ctx, invocation) {
 			if !yield(message, err) {
