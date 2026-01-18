@@ -13,6 +13,12 @@ import (
 	"github.com/oneblade/internal/app"
 )
 
+const (
+	cmdExit = "exit"
+	cmdQuit = "quit"
+	cmdHelp = "help"
+)
+
 // REPL provides an interactive command-line interface for the OneBlade agent.
 type REPL struct {
 	app               *app.Application
@@ -76,10 +82,30 @@ func NewREPL(ctx context.Context, opts ...Option) (*REPL, error) {
 	return r, nil
 }
 
+// isExitCommand checks if the input is an exit command.
+func isExitCommand(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	return text == cmdExit || text == cmdQuit
+}
+
 // Run starts the REPL and blocks until the user exits or context is cancelled.
 func (r *REPL) Run() error {
 	slog.Info("[repl] starting", "session_id", r.session.ID())
-	fmt.Println("OneBlade Agent Ready. Type 'exit' or 'quit' to exit, or press Ctrl+D.")
+	fmt.Printf("OneBlade Agent Ready. Type '%s' or '%s' to exit, or press Ctrl+D.\n", cmdExit, cmdQuit)
+
+	// Exit checker to handle exit/quit commands
+	exitChecker := func(in string, breakline bool) bool {
+		if isExitCommand(in) {
+			if breakline {
+				// After executor is called, we can exit
+				r.done = true
+				return true
+			}
+			// Exit immediately without calling executor
+			return true
+		}
+		return false
+	}
 
 	p := prompt.New(
 		r.executor,
@@ -90,6 +116,7 @@ func (r *REPL) Run() error {
 		prompt.OptionPreviewSuggestionTextColor(prompt.Blue),
 		prompt.OptionSelectedSuggestionBGColor(prompt.LightGray),
 		prompt.OptionSuggestionBGColor(prompt.DarkGray),
+		prompt.OptionSetExitCheckerOnInput(exitChecker),
 		prompt.OptionAddKeyBind(prompt.KeyBind{
 			Key: prompt.ControlC,
 			Fn: func(b *prompt.Buffer) {
@@ -111,13 +138,11 @@ func (r *REPL) executor(input string) {
 
 	// Check exit commands
 	switch strings.ToLower(text) {
-	case "exit", "quit":
-		r.done = true
+	case cmdExit, cmdQuit:
 		fmt.Println("Goodbye!")
-		// Note: go-prompt doesn't have a clean exit mechanism, but setting done flag
-		// allows Close() to know we exited normally
+		// ExitChecker will handle the actual exit, we just print the message
 		return
-	case "help":
+	case cmdHelp:
 		r.printHelp()
 		return
 	}
@@ -162,19 +187,19 @@ func (r *REPL) executor(input string) {
 // completer provides command suggestions.
 func (r *REPL) completer(d prompt.Document) []prompt.Suggest {
 	suggestions := []prompt.Suggest{
-		{Text: "exit", Description: "Exit the application"},
-		{Text: "quit", Description: "Exit the application"},
-		{Text: "help", Description: "Show available commands"},
+		{Text: cmdExit, Description: "Exit the application"},
+		{Text: cmdQuit, Description: "Exit the application"},
+		{Text: cmdHelp, Description: "Show available commands"},
 	}
 	return prompt.FilterHasPrefix(suggestions, d.GetWordBeforeCursor(), true)
 }
 
 // printHelp prints available commands.
 func (r *REPL) printHelp() {
-	fmt.Println(`
+	fmt.Printf(`
 Available Commands:
-  help        Show this help message
-  exit, quit  Exit the application
+  %s        Show this help message
+  %s, %s  Exit the application
   
 Keyboard Shortcuts:
   Ctrl+C      Exit
@@ -182,7 +207,8 @@ Keyboard Shortcuts:
   Ctrl+A      Go to beginning of line
   Ctrl+E      Go to end of line
   Ctrl+W      Delete word before cursor
-  ↑/↓         Navigate history`)
+  ↑/↓         Navigate history
+`, cmdHelp, cmdExit, cmdQuit)
 }
 
 // saveToMemory saves new messages to the memory store.

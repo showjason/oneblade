@@ -64,3 +64,8 @@ type CustomField struct {
 	Description string      `json:"description"`
 	Value       interface{} `json:"value"`
 }
+
+type ListIssuesParams struct {
+	JQL        string `json:"jql" jsonschema:"JQL query string to search issues"`
+	MaxResults int    `json:"max_results,omitempty" jsonschema:"Maximum number of results to return"`
+}

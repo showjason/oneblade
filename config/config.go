@@ -112,7 +112,7 @@ type RedisConfig struct {
 }
 
 type ServiceConfig struct {
-	Type        string         `toml:"type" validate:"required,oneof=prometheus pagerduty opensearch"`
+	Type        string         `toml:"type" validate:"required,oneof=prometheus pagerduty opensearch jira"`
 	Description string         `toml:"description"`
 	Enabled     bool           `toml:"enabled"`
 	Options     toml.Primitive `toml:"options"`
