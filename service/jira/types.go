@@ -7,6 +7,7 @@ type Issue struct {
 	Description  string                 `json:"description,omitempty"`
 	Status       string                 `json:"status,omitempty"`
 	Assignee     *Assignee              `json:"assignee,omitempty"`
+	Reporter     *Reporter              `json:"reporter,omitempty"`
 	Labels       []string               `json:"labels,omitempty"`
 	CustomFields map[string]interface{} `json:"custom_fields,omitempty"`
 	Attachments  []Attachment           `json:"attachments,omitempty"`
@@ -19,6 +20,12 @@ type Issue struct {
 }
 
 type Assignee struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
+}
+
+type Reporter struct {
 	ID          string `json:"id"`
 	DisplayName string `json:"display_name"`
 	Email       string `json:"email"`

@@ -22,6 +22,7 @@ import (
 	"github.com/oneblade/internal/summary"
 	"github.com/oneblade/service"
 
+	_ "github.com/oneblade/service/jira"
 	_ "github.com/oneblade/service/opensearch"
 	_ "github.com/oneblade/service/pagerduty"
 	_ "github.com/oneblade/service/prometheus"
