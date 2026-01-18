@@ -12,6 +12,7 @@ const (
 	PagerDuty  ServiceType = "pagerduty"
 	Prometheus ServiceType = "prometheus"
 	OpenSearch ServiceType = "opensearch"
+	Jira       ServiceType = "jira"
 )
 
 type Service interface {
