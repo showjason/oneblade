@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -39,8 +40,10 @@ func NewManagedSession(cfg ManagedSessionConfig) (*ManagedSession, error) {
 	if cfg.Summarizer == nil {
 		return nil, fmt.Errorf("summarizer is required")
 	}
+	id := uuid.NewString()
+	slog.Info("[session] created", "id", id)
 	return &ManagedSession{
-		id:         uuid.NewString(),
+		id:         id,
 		cfg:        cfg.Conversation,
 		summarizer: cfg.Summarizer,
 		state:      make(blades.State),
@@ -79,6 +82,11 @@ func (s *ManagedSession) Append(ctx context.Context, message *blades.Message) er
 	if message == nil {
 		return nil
 	}
+	slog.Debug("[session] append",
+		"role", message.Role,
+		"len", len(message.Text()),
+		"input_tokens", message.TokenUsage.InputTokens,
+	)
 
 	s.mu.Lock()
 	s.history = append(s.history, message)
@@ -98,10 +106,20 @@ func (s *ManagedSession) Append(ctx context.Context, message *blades.Message) er
 	needByTokens := message.TokenUsage.InputTokens >= threshold
 	needByCount := len(s.history) > s.cfg.MaxInContextMessages
 
+	slog.Debug("[session] check_threshold",
+		"input_tokens", message.TokenUsage.InputTokens,
+		"threshold", threshold,
+		"count", len(s.history),
+		"max_count", s.cfg.MaxInContextMessages,
+		"need_by_tokens", needByTokens,
+		"need_by_count", needByCount,
+	)
+
 	if !(needByTokens || needByCount) {
 		s.mu.Unlock()
 		return nil
 	}
+	slog.Info("[session] triggering summarization", "id", s.id)
 
 	cutoff := len(s.history) - s.cfg.RetainRecentMessages
 	if cutoff <= 0 {
@@ -122,6 +140,7 @@ func (s *ManagedSession) Append(ctx context.Context, message *blades.Message) er
 
 	newSummary, _, err := s.summarizer.Summarize(ctx, previousSummary, delta)
 	if err != nil {
+		slog.Error("[session] summarization failed", "error", err)
 		return err
 	}
 
@@ -138,6 +157,9 @@ func (s *ManagedSession) Append(ctx context.Context, message *blades.Message) er
 	s.state[StateKeyConversationSummary] = newSummary
 	s.state[StateKeySummaryUpdatedAt] = time.Now().UTC().Format(time.RFC3339Nano)
 	s.history = tail
+
+	slog.Info("[session] summarization complete", "id", s.id)
+	slog.Debug("[session] summary content", "content", newSummary)
 
 	return nil
 }

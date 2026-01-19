@@ -3,6 +3,7 @@ package summary
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/go-kratos/blades"
@@ -54,16 +55,25 @@ func (s *modelSummarizer) Summarize(ctx context.Context, previousSummary string,
 	instruction := blades.SystemMessage(buildSummaryInstruction(s.maxOutputTokens, s.maxSummaryChars))
 	user := blades.UserMessage(buildSummaryInput(previousSummary, messages, s.includeToolDetails))
 
+	slog.Info("[summary] start", "previous_len", len(previousSummary), "delta_count", len(messages))
+
 	resp, err := s.model.Generate(ctx, &blades.ModelRequest{
 		Instruction: instruction,
 		Messages:    []*blades.Message{user},
 	})
 	if err != nil {
+		slog.Error("[summary] failed", "error", err)
 		return "", blades.TokenUsage{}, err
 	}
 	if resp == nil || resp.Message == nil {
-		return "", blades.TokenUsage{}, fmt.Errorf("summary model returned empty response")
+		err := fmt.Errorf("summary model returned empty response")
+		slog.Error("[summary] failed", "error", err)
+		return "", blades.TokenUsage{}, err
 	}
+	slog.Info("[summary] complete",
+		"input_tokens", resp.Message.TokenUsage.InputTokens,
+		"output_tokens", resp.Message.TokenUsage.OutputTokens,
+	)
 	return strings.TrimSpace(resp.Message.Text()), resp.Message.TokenUsage, nil
 }
 
@@ -164,4 +174,3 @@ func renderTranscript(messages []*blades.Message, includeToolDetails bool) strin
 	}
 	return b.String()
 }
-

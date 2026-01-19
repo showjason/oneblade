@@ -89,31 +89,6 @@ func (s *Service) Close() error {
 	return nil
 }
 
-type Operation string
-
-const (
-	ListIssues  Operation = "list_issues"
-	CreateIssue Operation = "create_issue"
-	GetIssue    Operation = "get_issue"
-	UpdateIssue Operation = "update_issue"
-	AddComment  Operation = "add_comment"
-	DeleteIssue Operation = "delete_issue"
-)
-
-type Request struct {
-	Operation        Operation         `json:"operation" jsonschema:"The type of operation to perform"`
-	Issue            *Issue            `json:"issue,omitempty"`
-	ListIssuesParams *ListIssuesParams `json:"list_issues_params,omitempty"`
-}
-
-type Response struct {
-	Operation Operation `json:"operation"`
-	Success   bool      `json:"success"`
-	Message   string    `json:"message,omitempty"`
-	Issue     *Issue    `json:"issue,omitempty"`
-	Issues    []*Issue  `json:"issues,omitempty"`
-}
-
 func (s *Service) AsTool() (tools.Tool, error) {
 	return tools.NewFunc(
 		s.name,
@@ -134,12 +109,12 @@ func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
 		log.Printf("[jira] Handle: list_issues params present, calling ListIssues")
 		return s.ListIssues(ctx, req.ListIssuesParams)
 	case CreateIssue:
-		if req.Issue == nil {
+		if req.CreateIssueParams == nil {
 			log.Printf("[jira] Handle: create_issue params is nil, returning error")
-			return Response{Success: false, Message: "missing issue params"}, nil
+			return Response{Success: false, Message: "missing create_issue params"}, nil
 		}
 		log.Printf("[jira] Handle: create_issue params present, calling CreateIssue")
-		return s.CreateIssue(ctx, req.Issue)
+		return s.CreateIssue(ctx, req.CreateIssueParams)
 	case GetIssue:
 		if req.Issue == nil {
 			log.Printf("[jira] Handle: get_issue params is nil, returning error")
@@ -181,13 +156,18 @@ func (s *Service) ListIssues(ctx context.Context, params *ListIssuesParams) (Res
 		return Response{Success: false, Message: "JQL query is required"}, nil
 	}
 
-	maxResults := 50
+	maxResults := 30
 	if params.MaxResults > 0 {
 		maxResults = params.MaxResults
 	}
 
+	requiredFields := []string{
+		id, key, summary, status, assignee, reporter, created, updated, duedate,
+	}
+
 	opts := &jira.SearchOptions{
 		MaxResults: maxResults,
+		Fields:     requiredFields,
 	}
 
 	jiraIssues, _, err := s.client.Issue.SearchWithContext(ctx, params.JQL, opts)
@@ -210,27 +190,27 @@ func fromJiraIssues(jiraIssues []jira.Issue) []*Issue {
 }
 
 func fromJiraIssue(ji *jira.Issue) *Issue {
-	if ji == nil || ji.Fields == nil {
+	if ji == nil {
 		return &Issue{}
 	}
 
+	// Key 和 ID 在顶层，即使 Fields 为 nil 也应该保留
 	issue := &Issue{
-		ID:           ji.ID,
-		Key:          ji.Key,
-		Summary:      ji.Fields.Summary,
-		Description:  ji.Fields.Description,
-		Labels:       ji.Fields.Labels,
-		CustomFields: ji.Fields.Unknowns,
-		CreatedAt:    time.Time(ji.Fields.Created).Format("2006-01-02T15:04:05.000Z0700"),
-		UpdatedAt:    time.Time(ji.Fields.Updated).Format("2006-01-02T15:04:05.000Z0700"),
-		DueDate:      time.Time(ji.Fields.Duedate).Format("2006-01-02"),
-		Status:       ji.Fields.Status.Name,
-		Project: &Project{
-			ID:          ji.Fields.Project.ID,
-			Key:         ji.Fields.Project.Key,
-			DisplayName: ji.Fields.Project.Name,
-		},
+		ID:  ji.ID,
+		Key: ji.Key,
 	}
+
+	// 如果 Fields 为 nil，只返回 Key 和 ID
+	if ji.Fields == nil {
+		return issue
+	}
+
+	// Fields 存在，只填充必需字段（对应 types.go 中定义的常量）
+	issue.Summary = ji.Fields.Summary
+	issue.Status = ji.Fields.Status.Name
+	issue.CreatedAt = time.Time(ji.Fields.Created).Format("2006-01-02T15:04:05.000Z0700")
+	issue.UpdatedAt = time.Time(ji.Fields.Updated).Format("2006-01-02T15:04:05.000Z0700")
+	issue.DueDate = time.Time(ji.Fields.Duedate).Format("2006-01-02")
 
 	if ji.Fields.Assignee != nil {
 		issue.Assignee = &Assignee{
@@ -239,10 +219,11 @@ func fromJiraIssue(ji *jira.Issue) *Issue {
 			Email:       ji.Fields.Assignee.EmailAddress,
 		}
 	}
-	if ji.Fields.Priority != nil {
-		issue.Priority = &Priority{
-			ID:   ji.Fields.Priority.ID,
-			Name: ji.Fields.Priority.Name,
+	if ji.Fields.Reporter != nil {
+		issue.Reporter = &Reporter{
+			ID:          ji.Fields.Reporter.AccountID,
+			DisplayName: ji.Fields.Reporter.DisplayName,
+			Email:       ji.Fields.Reporter.EmailAddress,
 		}
 	}
 	return issue
@@ -262,13 +243,6 @@ func toJiraIssue(issue *Issue) *jira.Issue {
 			Labels:      issue.Labels,
 		},
 	}
-
-	if issue.Project != nil {
-		jIssue.Fields.Project = jira.Project{
-			Key: issue.Project.Key,
-			ID:  issue.Project.ID,
-		}
-	}
 	if issue.Priority != nil {
 		jIssue.Fields.Priority = &jira.Priority{
 			Name: issue.Priority.Name,
@@ -285,19 +259,57 @@ func toJiraIssue(issue *Issue) *jira.Issue {
 	return jIssue
 }
 
-func (s *Service) CreateIssue(ctx context.Context, issue *Issue) (Response, error) {
-	log.Printf("[jira] CreateIssue called with project_key=%s, summary=%s", issue.Project.Key, issue.Summary)
+func (s *Service) CreateIssue(ctx context.Context, params *CreateIssueParams) (Response, error) {
+	log.Printf("[jira] CreateIssue called with project=%s, type=%s, summary=%s", params.Project, params.Type, params.Summary)
 
-	jIssue := toJiraIssue(issue)
-	// Create usually requires Project Key and Issue Type
-	// If our Issue struct lacks IssueType, we might fail validation on Jira side
-	// but here we just pass what we can.
-	// Actually, check if IssueType is in Issue struct?
-	// It's not in the visible changes so far, might need to add it or pass via map.
-	// For now assuming the user provided valid fields in Issue struct.
+	if params.Type == "" {
+		return Response{Success: false, Message: "issue type is required for creating issue"}, nil
+	}
+	if params.Summary == "" {
+		return Response{Success: false, Message: "summary is required for creating issue"}, nil
+	}
 
-	// go-jira Create returns *Issue, *Response, error
-	created, _, err := s.client.Issue.Create(jIssue)
+	projectKey := params.Project
+	if projectKey == "" {
+		projectKey = ProjectKey
+	}
+
+	buildJiraIssue := func() *jira.Issue {
+		jIssue := &jira.Issue{
+			Fields: &jira.IssueFields{
+				Project: jira.Project{
+					Key: projectKey,
+				},
+				Type: jira.IssueType{
+					Name: params.Type, // 支持 name 或 id，Jira API 会自动处理
+				},
+				Summary:     params.Summary,
+				Description: params.Description,
+				Labels:      params.Labels,
+			},
+		}
+
+		if params.Priority != nil {
+			jIssue.Fields.Priority = &jira.Priority{
+				Name: params.Priority.Name,
+				ID:   params.Priority.ID,
+			}
+		}
+
+		if params.Assignee != nil {
+			jIssue.Fields.Assignee = &jira.User{
+				AccountID:    params.Assignee.ID,
+				Name:         params.Assignee.DisplayName,
+				EmailAddress: params.Assignee.Email,
+			}
+		}
+
+		return jIssue
+	}
+
+	// 创建 issue（使用 CreateWithContext 以支持 context）
+	jIssue := buildJiraIssue()
+	created, _, err := s.client.Issue.CreateWithContext(ctx, jIssue)
 	if err != nil {
 		log.Printf("[jira] CreateIssue failed: %v", err)
 		return Response{Success: false, Message: fmt.Sprintf("failed to create issue: %v", err)}, nil
