@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 
 	"github.com/c-bata/go-prompt"
@@ -21,14 +22,13 @@ const (
 
 // REPL provides an interactive command-line interface for the OneBlade agent.
 type REPL struct {
-	app               *app.Application
-	session           blades.Session
-	memStore          memory.MemoryStore
-	transcript        TranscriptWriter
-	transcriptDir     string
-	transcriptEnabled bool
-	promptPrefix      string
-	lastSavedIdx      int
+	app           *app.Application
+	session       blades.Session
+	memStore      memory.MemoryStore
+	transcript    *FileTranscriptWriter
+	transcriptDir string
+	promptPrefix  string
+	lastSavedIdx  int
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -39,10 +39,9 @@ type REPL struct {
 func NewREPL(ctx context.Context, opts ...Option) (*REPL, error) {
 	rctx, cancel := context.WithCancel(ctx)
 	r := &REPL{
-		ctx:               rctx,
-		cancel:            cancel,
-		promptPrefix:      "> ",
-		transcriptEnabled: true,
+		ctx:          rctx,
+		cancel:       cancel,
+		promptPrefix: "> ",
 	}
 
 	for _, opt := range opts {
@@ -67,17 +66,13 @@ func NewREPL(ctx context.Context, opts ...Option) (*REPL, error) {
 	r.memStore = r.app.MemoryStore()
 
 	// Create transcript writer
-	if r.transcriptEnabled {
-		tw, err := NewFileTranscriptWriterWithDir(session.ID(), r.transcriptDir)
-		if err != nil {
-			cancel()
-			return nil, fmt.Errorf("create transcript writer: %w", err)
-		}
-		r.transcript = tw
-		slog.Info("[repl] transcript enabled", "path", tw.Path())
-	} else {
-		r.transcript = NopTranscriptWriter{}
+	tw, err := NewFileTranscriptWriterWithDir(session.ID(), r.transcriptDir)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("create transcript writer: %w", err)
 	}
+	r.transcript = tw
+	slog.Info("[repl] transcript enabled", "path", tw.Path())
 
 	return r, nil
 }
@@ -233,6 +228,11 @@ func (r *REPL) saveToMemory() {
 // Close performs cleanup: flushes transcript and releases resources.
 func (r *REPL) Close() error {
 	slog.Info("[repl] closing", "session_id", r.session.ID())
+
+	if p := r.transcript.Path(); p != "" {
+		path, _ := filepath.Abs(p)
+		fmt.Printf("\n对话已保存到: %s\n", path)
+	}
 
 	// Flush transcript
 	if err := r.transcript.Flush(); err != nil {

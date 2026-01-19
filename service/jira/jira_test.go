@@ -70,7 +70,6 @@ func TestListIssuesSuccess(t *testing.T) {
 	require.Len(t, resp.Issues, 1)
 	require.Equal(t, "TEST-1", resp.Issues[0].Key)
 	require.NotNil(t, resp.Issues[0].Reporter)
-	require.Equal(t, "bob", resp.Issues[0].Reporter.ID)
 	require.Equal(t, "Bob", resp.Issues[0].Reporter.DisplayName)
 }
 

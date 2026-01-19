@@ -214,14 +214,12 @@ func fromJiraIssue(ji *jira.Issue) *Issue {
 
 	if ji.Fields.Assignee != nil {
 		issue.Assignee = &Assignee{
-			ID:          ji.Fields.Assignee.AccountID,
 			DisplayName: ji.Fields.Assignee.DisplayName,
 			Email:       ji.Fields.Assignee.EmailAddress,
 		}
 	}
 	if ji.Fields.Reporter != nil {
 		issue.Reporter = &Reporter{
-			ID:          ji.Fields.Reporter.AccountID,
 			DisplayName: ji.Fields.Reporter.DisplayName,
 			Email:       ji.Fields.Reporter.EmailAddress,
 		}
@@ -246,12 +244,10 @@ func toJiraIssue(issue *Issue) *jira.Issue {
 	if issue.Priority != nil {
 		jIssue.Fields.Priority = &jira.Priority{
 			Name: issue.Priority.Name,
-			ID:   issue.Priority.ID,
 		}
 	}
 	if issue.Assignee != nil {
 		jIssue.Fields.Assignee = &jira.User{
-			AccountID:    issue.Assignee.ID,
 			Name:         issue.Assignee.DisplayName,
 			EmailAddress: issue.Assignee.Email,
 		}
@@ -292,13 +288,11 @@ func (s *Service) CreateIssue(ctx context.Context, params *CreateIssueParams) (R
 		if params.Priority != nil {
 			jIssue.Fields.Priority = &jira.Priority{
 				Name: params.Priority.Name,
-				ID:   params.Priority.ID,
 			}
 		}
 
 		if params.Assignee != nil {
 			jIssue.Fields.Assignee = &jira.User{
-				AccountID:    params.Assignee.ID,
 				Name:         params.Assignee.DisplayName,
 				EmailAddress: params.Assignee.Email,
 			}

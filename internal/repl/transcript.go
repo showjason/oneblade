@@ -16,6 +16,8 @@ type TranscriptWriter interface {
 	WriteAssistantMessage(text string) error
 	// Flush ensures all buffered data is written to disk.
 	Flush() error
+	// Path returns the file path of the transcript.
+	Path() string
 	// Close closes the transcript writer and releases resources.
 	Close() error
 }
@@ -159,11 +161,3 @@ func (w *FileTranscriptWriter) Close() error {
 	w.file = nil
 	return err
 }
-
-// NopTranscriptWriter is a no-op implementation for when transcript is disabled.
-type NopTranscriptWriter struct{}
-
-func (NopTranscriptWriter) WriteUserMessage(_ string) error      { return nil }
-func (NopTranscriptWriter) WriteAssistantMessage(_ string) error { return nil }
-func (NopTranscriptWriter) Flush() error                         { return nil }
-func (NopTranscriptWriter) Close() error                         { return nil }

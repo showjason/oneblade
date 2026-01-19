@@ -61,26 +61,22 @@ type Issue struct {
 }
 
 type Assignee struct {
-	ID          string `json:"id"`
 	DisplayName string `json:"display_name"`
 	Email       string `json:"email"`
 }
 
 type Reporter struct {
-	ID          string `json:"id"`
 	DisplayName string `json:"display_name"`
 	Email       string `json:"email"`
 }
 
 type Attachment struct {
-	ID       string `json:"id"`
 	Filename string `json:"filename"`
 	MimeType string `json:"mime_type"`
 	Size     int    `json:"size"`
 }
 
 type Comment struct {
-	ID        string  `json:"id"`
 	Body      string  `json:"body"`
 	Author    *Author `json:"author,omitempty"`
 	CreatedAt string  `json:"created_at"`
@@ -88,19 +84,16 @@ type Comment struct {
 }
 
 type Author struct {
-	ID          string `json:"id"`
 	DisplayName string `json:"display_name"`
 	Email       string `json:"email"`
 }
 
 type Priority struct {
-	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
 
 type CustomField struct {
-	ID          string      `json:"id"`
 	Name        string      `json:"name"`
 	Description string      `json:"description"`
 	Value       interface{} `json:"value"`
