@@ -1,16 +1,6 @@
 package jira
 
-const (
-	id       = "id"
-	key      = "key"
-	summary  = "summary"
-	status   = "status"
-	assignee = "assignee"
-	reporter = "reporter"
-	created  = "created"
-	updated  = "updated"
-	duedate  = "duedate"
-)
+const defaultMaxResults = 30
 
 const ProjectKey = "ONEPOINT"
 
@@ -50,7 +40,6 @@ type Issue struct {
 	Reporter     *Reporter              `json:"reporter,omitempty"`
 	Labels       []string               `json:"labels,omitempty"`
 	CustomFields map[string]interface{} `json:"custom_fields,omitempty"`
-	Attachments  []Attachment           `json:"attachments,omitempty"`
 	Comments     []Comment              `json:"comments,omitempty"`
 	CreatedAt    string                 `json:"created_at"`
 	UpdatedAt    string                 `json:"updated_at"`
@@ -68,12 +57,6 @@ type Assignee struct {
 type Reporter struct {
 	DisplayName string `json:"display_name"`
 	Email       string `json:"email"`
-}
-
-type Attachment struct {
-	Filename string `json:"filename"`
-	MimeType string `json:"mime_type"`
-	Size     int    `json:"size"`
 }
 
 type Comment struct {

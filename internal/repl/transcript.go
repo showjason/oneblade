@@ -16,8 +16,6 @@ type TranscriptWriter interface {
 	WriteAssistantMessage(text string) error
 	// Flush ensures all buffered data is written to disk.
 	Flush() error
-	// Path returns the file path of the transcript.
-	Path() string
 	// Close closes the transcript writer and releases resources.
 	Close() error
 }

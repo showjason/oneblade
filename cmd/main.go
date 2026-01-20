@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/oneblade/internal/app"
 	"github.com/oneblade/internal/repl"
@@ -35,9 +34,6 @@ func run(ctx context.Context, configPath string) error {
 	}
 	defer func() {
 		slog.Info("[main] shutting down...")
-		if err := application.ShutdownWithTimeout(5 * time.Second); err != nil {
-			slog.Error("shutdown error", "error", err)
-		}
 	}()
 
 	// Initialize application

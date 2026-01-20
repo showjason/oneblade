@@ -229,10 +229,9 @@ func (r *REPL) saveToMemory() {
 func (r *REPL) Close() error {
 	slog.Info("[repl] closing", "session_id", r.session.ID())
 
-	if p := r.transcript.Path(); p != "" {
-		path, _ := filepath.Abs(p)
-		fmt.Printf("\n对话已保存到: %s\n", path)
-	}
+	path, _ := filepath.Abs(r.transcript.Path())
+
+	fmt.Printf("\nContext saved to: %s\n", path)
 
 	// Flush transcript
 	if err := r.transcript.Flush(); err != nil {

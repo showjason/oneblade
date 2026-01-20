@@ -156,13 +156,15 @@ func (s *Service) ListIssues(ctx context.Context, params *ListIssuesParams) (Res
 		return Response{Success: false, Message: "JQL query is required"}, nil
 	}
 
-	maxResults := 30
+	maxResults := defaultMaxResults
 	if params.MaxResults > 0 {
 		maxResults = params.MaxResults
 	}
 
 	requiredFields := []string{
-		id, key, summary, status, assignee, reporter, created, updated, duedate,
+		"id", "key", "summary", "status",
+		"assignee", "reporter", "created",
+		"updated", "duedate",
 	}
 
 	opts := &jira.SearchOptions{
