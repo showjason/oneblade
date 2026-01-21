@@ -57,16 +57,7 @@ func TestFileTranscriptWriter_DefaultDir(t *testing.T) {
 
 	homeDir, err := os.UserHomeDir()
 	require.NoError(t, err)
-	require.Equal(t, filepath.Join(homeDir, ".oneblade"), dir)
-}
-
-func TestNopTranscriptWriter(t *testing.T) {
-	nop := NopTranscriptWriter{}
-
-	require.NoError(t, nop.WriteUserMessage("test"))
-	require.NoError(t, nop.WriteAssistantMessage("test"))
-	require.NoError(t, nop.Flush())
-	require.NoError(t, nop.Close())
+	require.Equal(t, filepath.Join(homeDir, ".oneblade", "sessions"), dir)
 }
 
 func TestFileTranscriptWriter_MultipleWrites(t *testing.T) {

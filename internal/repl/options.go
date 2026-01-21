@@ -32,12 +32,3 @@ func WithPrompt(prefix string) Option {
 		return nil
 	}
 }
-
-// WithTranscriptEnabled enables or disables transcript saving.
-// Default is true.
-func WithTranscriptEnabled(enabled bool) Option {
-	return func(r *REPL) error {
-		r.transcriptEnabled = enabled
-		return nil
-	}
-}

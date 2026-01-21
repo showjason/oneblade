@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 
 	"github.com/c-bata/go-prompt"
@@ -13,16 +14,21 @@ import (
 	"github.com/oneblade/internal/app"
 )
 
+const (
+	cmdExit = "exit"
+	cmdQuit = "quit"
+	cmdHelp = "help"
+)
+
 // REPL provides an interactive command-line interface for the OneBlade agent.
 type REPL struct {
-	app               *app.Application
-	session           blades.Session
-	memStore          memory.MemoryStore
-	transcript        TranscriptWriter
-	transcriptDir     string
-	transcriptEnabled bool
-	promptPrefix      string
-	lastSavedIdx      int
+	app           *app.Application
+	session       blades.Session
+	memStore      memory.MemoryStore
+	transcript    *FileTranscriptWriter
+	transcriptDir string
+	promptPrefix  string
+	lastSavedIdx  int
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -33,10 +39,9 @@ type REPL struct {
 func NewREPL(ctx context.Context, opts ...Option) (*REPL, error) {
 	rctx, cancel := context.WithCancel(ctx)
 	r := &REPL{
-		ctx:               rctx,
-		cancel:            cancel,
-		promptPrefix:      "> ",
-		transcriptEnabled: true,
+		ctx:          rctx,
+		cancel:       cancel,
+		promptPrefix: "> ",
 	}
 
 	for _, opt := range opts {
@@ -61,25 +66,41 @@ func NewREPL(ctx context.Context, opts ...Option) (*REPL, error) {
 	r.memStore = r.app.MemoryStore()
 
 	// Create transcript writer
-	if r.transcriptEnabled {
-		tw, err := NewFileTranscriptWriterWithDir(session.ID(), r.transcriptDir)
-		if err != nil {
-			cancel()
-			return nil, fmt.Errorf("create transcript writer: %w", err)
-		}
-		r.transcript = tw
-		slog.Info("[repl] transcript enabled", "path", tw.Path())
-	} else {
-		r.transcript = NopTranscriptWriter{}
+	tw, err := NewFileTranscriptWriterWithDir(session.ID(), r.transcriptDir)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("create transcript writer: %w", err)
 	}
+	r.transcript = tw
+	slog.Info("[repl] transcript enabled", "path", tw.Path())
 
 	return r, nil
+}
+
+// isExitCommand checks if the input is an exit command.
+func isExitCommand(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	return text == cmdExit || text == cmdQuit
 }
 
 // Run starts the REPL and blocks until the user exits or context is cancelled.
 func (r *REPL) Run() error {
 	slog.Info("[repl] starting", "session_id", r.session.ID())
-	fmt.Println("OneBlade Agent Ready. Type 'exit' or 'quit' to exit, or press Ctrl+D.")
+	fmt.Printf("OneBlade Agent Ready. Type '%s' or '%s' to exit, or press Ctrl+D.\n", cmdExit, cmdQuit)
+
+	// Exit checker to handle exit/quit commands
+	exitChecker := func(in string, breakline bool) bool {
+		if isExitCommand(in) {
+			if breakline {
+				// After executor is called, we can exit
+				r.done = true
+				return true
+			}
+			// Exit immediately without calling executor
+			return true
+		}
+		return false
+	}
 
 	p := prompt.New(
 		r.executor,
@@ -90,6 +111,7 @@ func (r *REPL) Run() error {
 		prompt.OptionPreviewSuggestionTextColor(prompt.Blue),
 		prompt.OptionSelectedSuggestionBGColor(prompt.LightGray),
 		prompt.OptionSuggestionBGColor(prompt.DarkGray),
+		prompt.OptionSetExitCheckerOnInput(exitChecker),
 		prompt.OptionAddKeyBind(prompt.KeyBind{
 			Key: prompt.ControlC,
 			Fn: func(b *prompt.Buffer) {
@@ -111,13 +133,11 @@ func (r *REPL) executor(input string) {
 
 	// Check exit commands
 	switch strings.ToLower(text) {
-	case "exit", "quit":
-		r.done = true
+	case cmdExit, cmdQuit:
 		fmt.Println("Goodbye!")
-		// Note: go-prompt doesn't have a clean exit mechanism, but setting done flag
-		// allows Close() to know we exited normally
+		// ExitChecker will handle the actual exit, we just print the message
 		return
-	case "help":
+	case cmdHelp:
 		r.printHelp()
 		return
 	}
@@ -162,19 +182,19 @@ func (r *REPL) executor(input string) {
 // completer provides command suggestions.
 func (r *REPL) completer(d prompt.Document) []prompt.Suggest {
 	suggestions := []prompt.Suggest{
-		{Text: "exit", Description: "Exit the application"},
-		{Text: "quit", Description: "Exit the application"},
-		{Text: "help", Description: "Show available commands"},
+		{Text: cmdExit, Description: "Exit the application"},
+		{Text: cmdQuit, Description: "Exit the application"},
+		{Text: cmdHelp, Description: "Show available commands"},
 	}
 	return prompt.FilterHasPrefix(suggestions, d.GetWordBeforeCursor(), true)
 }
 
 // printHelp prints available commands.
 func (r *REPL) printHelp() {
-	fmt.Println(`
+	fmt.Printf(`
 Available Commands:
-  help        Show this help message
-  exit, quit  Exit the application
+  %s        Show this help message
+  %s, %s  Exit the application
   
 Keyboard Shortcuts:
   Ctrl+C      Exit
@@ -182,7 +202,8 @@ Keyboard Shortcuts:
   Ctrl+A      Go to beginning of line
   Ctrl+E      Go to end of line
   Ctrl+W      Delete word before cursor
-  ↑/↓         Navigate history`)
+  ↑/↓         Navigate history
+`, cmdHelp, cmdExit, cmdQuit)
 }
 
 // saveToMemory saves new messages to the memory store.
@@ -207,6 +228,10 @@ func (r *REPL) saveToMemory() {
 // Close performs cleanup: flushes transcript and releases resources.
 func (r *REPL) Close() error {
 	slog.Info("[repl] closing", "session_id", r.session.ID())
+
+	path, _ := filepath.Abs(r.transcript.Path())
+
+	fmt.Printf("\nContext saved to: %s\n", path)
 
 	// Flush transcript
 	if err := r.transcript.Flush(); err != nil {

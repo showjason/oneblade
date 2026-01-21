@@ -159,11 +159,3 @@ func (w *FileTranscriptWriter) Close() error {
 	w.file = nil
 	return err
 }
-
-// NopTranscriptWriter is a no-op implementation for when transcript is disabled.
-type NopTranscriptWriter struct{}
-
-func (NopTranscriptWriter) WriteUserMessage(_ string) error      { return nil }
-func (NopTranscriptWriter) WriteAssistantMessage(_ string) error { return nil }
-func (NopTranscriptWriter) Flush() error                         { return nil }
-func (NopTranscriptWriter) Close() error                         { return nil }
