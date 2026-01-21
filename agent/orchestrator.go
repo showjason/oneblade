@@ -90,11 +90,18 @@ func NewOrchestratorAgent(cfg OrchestratorConfig) (blades.Agent, error) {
 	// 构建详细的 description，包含路由规则
 	description := consts.BuildOrchestratorDescription(subAgentNames)
 
+	// 构建 handoff instruction
+	instruction, err := consts.BuildHandoffInstruction(subAgents)
+	if err != nil {
+		return nil, fmt.Errorf("build handoff instruction: %w", err)
+	}
+
 	return NewRoutingAgent(RoutingConfig{
 		Name:        consts.AgentNameOrchestrator,
 		Description: description,
 		Model:       orchestratorModel,
 		SubAgents:   subAgents,
+		Instruction: instruction,
 	})
 }
 

@@ -1,6 +1,12 @@
 package consts
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+	"text/template"
+
+	"github.com/go-kratos/blades"
+)
 
 const (
 
@@ -188,6 +194,21 @@ const (
 	PredictionAgentDescription = "负责基于历史数据进行健康预测的 Agent"
 	ReportAgentDescription     = "负责汇总分析数据并生成巡检报告的 Agent"
 	GeneralAgentDescription    = "负责通用工具的 Agent，提供系统操作和其它杂项任务的能力"
+
+	// HandoffInstructionTemplate handoff instruction 模板
+	HandoffInstructionTemplate = `You have access to the following agents:
+{{range .Targets}}
+Agent Name: {{.Name}}
+Agent Description: {{.Description}}
+{{end}}
+Your task:
+- Determine whether you are the most appropriate agent to answer the user's question based on your own description.
+- If another agent is clearly better suited to handle the user's request, you must transfer the query by calling the "handoff_to_agent" function.
+- If no other agent is more suitable, respond to the user directly as a helpful assistant, providing clear, detailed, and accurate information.
+
+Important rules:
+- When transferring a query, output only the function call, and nothing else.
+- Do not include explanations, reasoning, or any additional text outside of the function call.`
 )
 
 // BuildOrchestratorDescription 构建包含路由规则的 orchestrator description
@@ -204,4 +225,16 @@ func BuildOrchestratorDescription(subAgentNames []string) string {
 	desc += "- 生成巡检报告 → 路由到 report_agent\n"
 	desc += "\n重要：必须路由到合适的子 Agent，不要直接回复用户。"
 	return desc
+}
+
+// BuildHandoffInstruction 根据 agents 列表构建 handoff instruction
+func BuildHandoffInstruction(targets []blades.Agent) (string, error) {
+	tmpl := template.Must(template.New("handoff_to_agent_prompt").Parse(HandoffInstructionTemplate))
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, map[string]any{
+		"Targets": targets,
+	}); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }

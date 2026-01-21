@@ -1,12 +1,10 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
-	"text/template"
 
 	"github.com/go-kratos/blades"
 	"github.com/google/jsonschema-go/jsonschema"
@@ -14,39 +12,13 @@ import (
 	"github.com/oneblade/internal/middleware"
 )
 
-// 说明：
-// - blades/flow/routing.go 依赖 blades/internal/handoff（Go internal 机制导致本仓库无法直接 import）。
-// - 这里以“同等行为”的方式复刻 handoff tool + instruction 构建逻辑，并额外注入 middleware.LoadSessionHistory。
-
+// Note:
+// - This is a rewrite implementation of blades/flow/routing.go
+// - blades/flow/routing.go depends on blades/internal/handoff (Go internal mechanism prevents direct import)
+// - This replicates the handoff tool logic with equivalent behavior and additionally injects middleware.LoadSessionHistory
 const (
 	actionHandoffToAgent = "handoff_to_agent"
 )
-
-const handoffInstructionTemplate = `You have access to the following agents:
-{{range .Targets}}
-Agent Name: {{.Name}}
-Agent Description: {{.Description}}
-{{end}}
-Your task:
-- Determine whether you are the most appropriate agent to answer the user's question based on your own description.
-- If another agent is clearly better suited to handle the user's request, you must transfer the query by calling the "handoff_to_agent" function.
-- If no other agent is more suitable, respond to the user directly as a helpful assistant, providing clear, detailed, and accurate information.
-
-Important rules:
-- When transferring a query, output only the function call, and nothing else.
-- Do not include explanations, reasoning, or any additional text outside of the function call.`
-
-var handoffToAgentPromptTmpl = template.Must(template.New("handoff_to_agent_prompt").Parse(handoffInstructionTemplate))
-
-func buildHandoffInstruction(targets []blades.Agent) (string, error) {
-	var buf bytes.Buffer
-	if err := handoffToAgentPromptTmpl.Execute(&buf, map[string]any{
-		"Targets": targets,
-	}); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
-}
 
 type handoffTool struct{}
 
@@ -90,6 +62,7 @@ type RoutingConfig struct {
 	Description string
 	Model       blades.ModelProvider
 	SubAgents   []blades.Agent
+	Instruction string
 }
 
 type routingAgent struct {
@@ -98,16 +71,11 @@ type routingAgent struct {
 }
 
 func NewRoutingAgent(config RoutingConfig) (blades.Agent, error) {
-	instruction, err := buildHandoffInstruction(config.SubAgents)
-	if err != nil {
-		return nil, err
-	}
-
 	rootAgent, err := blades.NewAgent(
 		config.Name,
 		blades.WithModel(config.Model),
 		blades.WithDescription(config.Description),
-		blades.WithInstruction(instruction),
+		blades.WithInstruction(config.Instruction),
 		blades.WithTools(&handoffTool{}),
 		blades.WithMiddleware(
 			middleware.NewAgentLogging,
