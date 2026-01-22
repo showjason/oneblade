@@ -337,40 +337,60 @@ func (s *Service) GetIssue(ctx context.Context, issue *Issue) (Response, error) 
 	return Response{Success: true, Message: "Issue retrieved successfully", Issue: fromJiraIssue(result)}, nil
 }
 
+func (s *Service) updateStatus(idOrKey, targetStatusName string) error {
+	transitions, _, err := s.client.Issue.GetTransitions(idOrKey)
+	if err != nil {
+		return fmt.Errorf("failed to get transitions: %w", err)
+	}
+
+	var transitionID string
+	for _, t := range transitions {
+		if t.To.Name == targetStatusName {
+			transitionID = t.ID
+			break
+		}
+	}
+
+	if transitionID == "" {
+		return fmt.Errorf("no transition found to status: %s", targetStatusName)
+	}
+
+	_, err = s.client.Issue.DoTransition(idOrKey, transitionID)
+	return err
+}
+
 func (s *Service) UpdateIssue(ctx context.Context, issue *Issue) (Response, error) {
 	idOrKey := issue.ID
 	if idOrKey == "" {
 		idOrKey = issue.Key
 	}
-
 	log.Printf("[jira] UpdateIssue called with id_or_key=%s", idOrKey)
 
 	if issue == nil || (issue.ID == "" && issue.Key == "") {
 		return Response{Success: false, Message: "missing issue id or key"}, nil
 	}
 
-	// go-jira Update takes (issueID, map[string]interface{}) usually for flexibility
-	// or we can pass a struct if we only update standard fields.
-	// Using map ensures we only send what we want to update.
-
-	jIssue := toJiraIssue(issue)
-	// Update with struct (go-jira v1.17.0+ seems to enforce this or map check failed)
-	_, _, err := s.client.Issue.Update(jIssue)
-	if err != nil {
-		log.Printf("[jira] UpdateIssue failed: %v", err)
-		return Response{Success: false, Message: fmt.Sprintf("failed to update issue: %v", err)}, nil
+	if issue.Status != "" {
+		err := s.updateStatus(idOrKey, issue.Status)
+		if err != nil {
+			log.Printf("[jira] UpdateIssue failed to update status: %v", err)
+			return Response{Success: false, Message: fmt.Sprintf("failed to update status: %v", err)}, nil
+		}
 	}
 
-	// Fetch updated issue to return complete state
-	updatedIssue, _, err := s.client.Issue.Get(idOrKey, nil)
-	if err != nil {
-		log.Printf("[jira] UpdateIssue succeeded but failed to refresh: %v", err)
-		// Return success even if fetch fails, but warn?
-		return Response{Success: true, Message: "Issue updated successfully but failed to refresh", Issue: nil}, nil
+	hasOtherFields := issue.Summary != "" || issue.Description != "" || issue.Assignee != nil ||
+		issue.Priority != nil || len(issue.Labels) > 0
+
+	if hasOtherFields {
+		_, _, err := s.client.Issue.Update(toJiraIssue(issue))
+		if err != nil {
+			log.Printf("[jira] UpdateIssue failed: %v", err)
+			return Response{Success: false, Message: fmt.Sprintf("failed to update issue: %v", err)}, nil
+		}
 	}
 
 	log.Printf("[jira] UpdateIssue succeeded for %s", idOrKey)
-	return Response{Success: true, Message: "Issue updated successfully", Issue: fromJiraIssue(updatedIssue)}, nil
+	return Response{Success: true, Message: "Issue updated successfully"}, nil
 }
 
 func (s *Service) AddComment(ctx context.Context, issue *Issue) (Response, error) {

@@ -138,7 +138,7 @@ func TestCreateIssueWithDefaultProject(t *testing.T) {
 	})
 	defer teardown()
 
-	// 不指定 Project，应该使用默认的 ProjectKey
+	// When Project is not specified, the default ProjectKey should be used
 	resp, err := svc.CreateIssue(context.Background(), &CreateIssueParams{
 		Type:    "DevOps",
 		Summary: "Test issue",
@@ -148,11 +148,11 @@ func TestCreateIssueWithDefaultProject(t *testing.T) {
 }
 
 func TestCreateIssueWithNilFields(t *testing.T) {
-	// 测试当 Jira API 只返回 id 和 key，不返回 fields 的情况
+	// Test the case when Jira API only returns id and key, without fields
 	svc, teardown := newTestService(t, func(mux *http.ServeMux) {
 		mux.HandleFunc("/rest/api/2/issue", func(w http.ResponseWriter, r *http.Request) {
 			require.Equal(t, http.MethodPost, r.Method)
-			// 模拟 Jira API 创建 issue 时的最小响应（只包含 id 和 key）
+			// Simulate the minimal response from Jira API when creating an issue (only contains id and key)
 			fmt.Fprintf(w, `{
 				"id": "10001",
 				"key": "TEST-2",
@@ -169,10 +169,10 @@ func TestCreateIssueWithNilFields(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Success)
 	require.NotNil(t, resp.Issue)
-	// 验证即使 Fields 为 nil，Key 和 ID 也应该被正确返回
+	// Verify that even if Fields is nil, Key and ID should be correctly returned
 	require.Equal(t, "TEST-2", resp.Issue.Key)
 	require.Equal(t, "10001", resp.Issue.ID)
-	// 其他字段应该为空（因为 Fields 为 nil）
+	// Other fields should be empty (because Fields is nil)
 	require.Empty(t, resp.Issue.Summary)
 }
 
@@ -200,6 +200,152 @@ func TestHealthFailure(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "health check failed")
 }
+
+func TestUpdateIssueMissingIdOrKey(t *testing.T) {
+	svc := &Service{name: "jira"}
+	resp, err := svc.UpdateIssue(context.Background(), &Issue{})
+	require.NoError(t, err)
+	require.False(t, resp.Success)
+	require.Contains(t, resp.Message, "missing issue id or key")
+}
+
+func TestUpdateIssueSuccess(t *testing.T) {
+	svc, teardown := newTestService(t, func(mux *http.ServeMux) {
+		// Handle transitions API calls
+		mux.HandleFunc("/rest/api/2/issue/TEST-1/transitions", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet {
+				// Return available transitions
+				fmt.Fprintf(w, transitionsResponseJSON)
+			} else if r.Method == http.MethodPost {
+				// Verify transition request
+				require.Equal(t, http.MethodPost, r.Method)
+				w.WriteHeader(http.StatusNoContent)
+			}
+		})
+
+		// Handle PUT request (update other fields)
+		mux.HandleFunc("/rest/api/2/issue/TEST-1", func(w http.ResponseWriter, r *http.Request) {
+			require.Equal(t, http.MethodPut, r.Method)
+			require.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+			// Read request body and verify it contains all fields (but not status)
+			body := make([]byte, r.ContentLength)
+			r.Body.Read(body)
+			bodyStr := string(body)
+			require.Contains(t, bodyStr, "summary")
+			require.Contains(t, bodyStr, "description")
+			require.Contains(t, bodyStr, "assignee")
+			require.Contains(t, bodyStr, "priority")
+			require.Contains(t, bodyStr, "labels")
+
+			// Verify that status field is not included (because status is updated via transitions API)
+			require.NotContains(t, bodyStr, "status")
+
+			// Verify Assignee field
+			require.Contains(t, bodyStr, "Alice")
+			require.Contains(t, bodyStr, "alice@example.com")
+
+			w.WriteHeader(http.StatusNoContent)
+		})
+	})
+	defer teardown()
+
+	issue := &Issue{
+		Key:         "TEST-1",
+		Summary:     "Updated summary",
+		Description: "Updated description",
+		Status:      "In Progress",
+		Assignee: &Assignee{
+			DisplayName: "Alice",
+			Email:       "alice@example.com",
+		},
+		Priority: &Priority{
+			Name: "High",
+		},
+		Labels: []string{"bug", "urgent"},
+	}
+
+	resp, err := svc.UpdateIssue(context.Background(), issue)
+	require.NoError(t, err)
+	require.True(t, resp.Success)
+	require.Equal(t, "Issue updated successfully", resp.Message)
+}
+
+func TestUpdateIssueFailure(t *testing.T) {
+	svc, teardown := newTestService(t, func(mux *http.ServeMux) {
+		// Simulate GET transitions returning an error (issue does not exist)
+		mux.HandleFunc("/rest/api/2/issue/TEST-1/transitions", func(w http.ResponseWriter, r *http.Request) {
+			require.Equal(t, http.MethodGet, r.Method)
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, `{"errorMessages":["Issue does not exist"]}`)
+		})
+	})
+	defer teardown()
+
+	issue := &Issue{
+		Key:    "TEST-1",
+		Status: "In Progress",
+	}
+
+	resp, err := svc.UpdateIssue(context.Background(), issue)
+	require.NoError(t, err)
+	require.False(t, resp.Success)
+	require.Contains(t, resp.Message, "failed to get transitions")
+}
+
+func TestUpdateIssueStatusNotFound(t *testing.T) {
+	svc, teardown := newTestService(t, func(mux *http.ServeMux) {
+		// Return transitions, but without the target status
+		mux.HandleFunc("/rest/api/2/issue/TEST-1/transitions", func(w http.ResponseWriter, r *http.Request) {
+			require.Equal(t, http.MethodGet, r.Method)
+			// Return a transitions list that does not contain "Unknown Status"
+			fmt.Fprintf(w, `{
+				"transitions": [
+					{
+						"id": "21",
+						"name": "In Progress",
+						"to": {
+							"name": "In Progress",
+							"id": "3"
+						}
+					}
+				]
+			}`)
+		})
+	})
+	defer teardown()
+
+	issue := &Issue{
+		Key:    "TEST-1",
+		Status: "Unknown Status",
+	}
+
+	resp, err := svc.UpdateIssue(context.Background(), issue)
+	require.NoError(t, err)
+	require.False(t, resp.Success)
+	require.Contains(t, resp.Message, "no transition found to status")
+}
+
+const transitionsResponseJSON = `{
+	"transitions": [
+		{
+			"id": "21",
+			"name": "In Progress",
+			"to": {
+				"name": "In Progress",
+				"id": "3"
+			}
+		},
+		{
+			"id": "31",
+			"name": "Done",
+			"to": {
+				"name": "Done",
+				"id": "2"
+			}
+		}
+	]
+}`
 
 const createIssueResponseJSON = `{
 	"id": "10001",

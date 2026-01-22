@@ -138,6 +138,20 @@ const (
 
 如果工具调用失败，返回格式为: {"operation": "...", "success": false, "message": "错误信息"}
 
+**Jira 状态映射规则：**
+当用户请求更新 Jira issue 状态时，请根据以下映射规则将用户的自然语言转换为正确的状态名称：
+
+- "打开"、"新建"、"创建"、"open" → "Open"
+- "待处理"、"等待"、"pending" → "Pending"  
+- "开始"、"进行中"、"开始处理"、"start"、"start progress" → "In Progress"
+- "关闭"、"完成"、"解决"、"close"、"close issue" → "Closed"
+- "重新打开"、"重新开始"、"reopen" → "Reopened"
+
+**重要提示：**
+1. 在调用 update_issue 操作时，必须使用映射后的状态名称设置 issue.status 字段
+2. 如果用户提供的状态名称已经是标准状态名称（Open, Pending, Start Progress, Close Issue），直接使用
+3. 如果无法映射，请使用用户提供的原始状态名称，但建议用户确认状态名称是否正确
+
 请根据需求灵活组合使用这些工具，并确保在需要时调用工具。`
 
 	// ReportAgentInstruction 报告生成专家提示词
