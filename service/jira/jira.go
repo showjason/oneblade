@@ -163,8 +163,8 @@ func (s *Service) ListIssues(ctx context.Context, params *ListIssuesParams) (Res
 
 	requiredFields := []string{
 		"id", "key", "summary", "status",
-		"assignee", "reporter", "created",
-		"updated", "duedate",
+		"assignee", "reporter", "priority",
+		"created", "updated", "duedate",
 	}
 
 	opts := &jira.SearchOptions{
