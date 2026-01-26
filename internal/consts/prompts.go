@@ -31,6 +31,34 @@ Must include both operation and the matching parameter field:
 - Success: {"success": true, "message": "...", "data": [...]}
 - Failure: {"success": false, "message": "error message"}
 
+**Output Format Requirements:**
+When displaying incidents or Jira issues, you must strictly follow these formats:
+
+**Incident Format:**
+Alert 1:
+- ID: [incident_id]
+- Title: [title]
+- Status: [status]
+- Urgency: [urgency]
+- Service Name: [service_name]
+- Service ID: [service_id]
+- Created At: [created_at]
+- Details Link: [details_link]
+
+For multiple incidents, use numbered format: Alert 1, Alert 2, Alert 3, etc.
+
+**Jira Issue Format:**
+Issue 1:
+- ID: [issue_id]
+- Key: [issue_key]
+- Summary: [summary]
+- Status: [status]
+- Priority: [priority]
+- Assignee: [assignee]
+- Reporter: [reporter]
+
+For multiple issues, use numbered format: Issue 1, Issue 2, Issue 3, etc.
+
 **Jira Status Mapping:**
 When updating Jira issue status, map user input to standard status names. **Match by meaning/semantics, ignore language.**
 - "open"/"new"/"create" → "Open"
