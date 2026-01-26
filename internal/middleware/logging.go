@@ -12,8 +12,6 @@ type AgentLogging struct {
 	next blades.Handler
 }
 
-// NewAgentLogging 记录 agent 之间、agent 与 tool 之间的交互日志。
-// 参考官方示例：以 Handler 包装的方式实现 Middleware（func(next Handler) Handler）。
 func NewAgentLogging(next blades.Handler) blades.Handler {
 	return &AgentLogging{next: next}
 }
