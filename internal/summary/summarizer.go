@@ -26,9 +26,6 @@ func (c *Config) validate() error {
 	if c.Model == nil {
 		return fmt.Errorf("summary model is required")
 	}
-	if c.MaxSummaryChars <= 0 {
-		c.MaxSummaryChars = 800
-	}
 	return nil
 }
 
