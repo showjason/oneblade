@@ -3,7 +3,7 @@ package jira
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -70,18 +70,17 @@ func (s *Service) Type() service.ServiceType {
 }
 
 func (s *Service) Health(ctx context.Context) error {
-	log.Printf("[jira] Health check starting")
+	slog.Debug("[jira] health check starting")
 
 	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	_, _, err := s.client.User.GetSelfWithContext(healthCtx)
 	if err != nil {
-		log.Printf("[jira] Health check failed: %v", err)
 		return fmt.Errorf("jira health check failed: %w", err)
 	}
 
-	log.Printf("[jira] Health check succeeded")
+	slog.Debug("[jira] health check succeeded")
 	return nil
 }
 
@@ -98,50 +97,38 @@ func (s *Service) AsTool() (tools.Tool, error) {
 }
 
 func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
-	log.Printf("[jira] Handle called with operation: %s", req.Operation)
+	slog.Debug("[jira] handle called", "operation", req.Operation)
 
 	switch req.Operation {
 	case ListIssues:
 		if req.ListIssuesParams == nil {
-			log.Printf("[jira] Handle: list_issues params is nil, returning error")
 			return Response{Success: false, Message: "missing list_issues params"}, nil
 		}
-		log.Printf("[jira] Handle: list_issues params present, calling ListIssues")
 		return s.ListIssues(ctx, req.ListIssuesParams)
 	case CreateIssue:
 		if req.CreateIssueParams == nil {
-			log.Printf("[jira] Handle: create_issue params is nil, returning error")
 			return Response{Success: false, Message: "missing create_issue params"}, nil
 		}
-		log.Printf("[jira] Handle: create_issue params present, calling CreateIssue")
 		return s.CreateIssue(ctx, req.CreateIssueParams)
 	case GetIssue:
 		if req.Issue == nil {
-			log.Printf("[jira] Handle: get_issue params is nil, returning error")
 			return Response{Success: false, Message: "missing issue params"}, nil
 		}
-		log.Printf("[jira] Handle: get_issue params present, calling GetIssue")
 		return s.GetIssue(ctx, req.Issue)
 	case UpdateIssue:
 		if req.Issue == nil {
-			log.Printf("[jira] Handle: update_issue params is nil, returning error")
 			return Response{Success: false, Message: "missing issue params"}, nil
 		}
-		log.Printf("[jira] Handle: update_issue params present, calling UpdateIssue")
 		return s.UpdateIssue(ctx, req.Issue)
 	case AddComment:
 		if req.Issue == nil {
-			log.Printf("[jira] Handle: add_comment params is nil, returning error")
 			return Response{Success: false, Message: "missing issue params"}, nil
 		}
-		log.Printf("[jira] Handle: add_comment params present, calling AddComment")
 		return s.AddComment(ctx, req.Issue)
 	case DeleteIssue:
 		if req.Issue == nil {
-			log.Printf("[jira] Handle: delete_issue params is nil, returning error")
 			return Response{Success: false, Message: "missing issue params"}, nil
 		}
-		log.Printf("[jira] Handle: delete_issue params present, calling DeleteIssue")
 		return s.DeleteIssue(ctx, req.Issue)
 	default:
 		return Response{Success: false, Message: fmt.Sprintf("unknown operation: %s", req.Operation)}, nil
@@ -149,10 +136,9 @@ func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
 }
 
 func (s *Service) ListIssues(ctx context.Context, params *ListIssuesParams) (Response, error) {
-	log.Printf("[jira] ListIssues called with jql=%s, max_results=%d", params.JQL, params.MaxResults)
+	slog.Debug("[jira] list_issues called", "jql", params.JQL, "max_results", params.MaxResults)
 
 	if params == nil || params.JQL == "" {
-		log.Printf("[jira] ListIssues failed: JQL query is required")
 		return Response{Success: false, Message: "JQL query is required"}, nil
 	}
 
@@ -174,11 +160,10 @@ func (s *Service) ListIssues(ctx context.Context, params *ListIssuesParams) (Res
 
 	jiraIssues, _, err := s.client.Issue.SearchWithContext(ctx, params.JQL, opts)
 	if err != nil {
-		log.Printf("[jira] ListIssues failed: %v", err)
 		return Response{Success: false, Message: fmt.Sprintf("failed to list issues: %v", err)}, nil
 	}
 
-	log.Printf("[jira] ListIssues succeeded, found %d issues", len(jiraIssues))
+	slog.Info("[jira] list_issues succeeded", "count", len(jiraIssues))
 	issues := fromJiraIssues(jiraIssues)
 	return Response{Success: true, Message: "Issues listed successfully", Issues: issues}, nil
 }
@@ -258,7 +243,7 @@ func toJiraIssue(issue *Issue) *jira.Issue {
 }
 
 func (s *Service) CreateIssue(ctx context.Context, params *CreateIssueParams) (Response, error) {
-	log.Printf("[jira] CreateIssue called with project=%s, type=%s, summary=%s", params.Project, params.Type, params.Summary)
+	slog.Debug("[jira] create_issue called", "project", params.Project, "type", params.Type, "summary", params.Summary)
 
 	if params.Type == "" {
 		return Response{Success: false, Message: "issue type is required for creating issue"}, nil
@@ -307,11 +292,10 @@ func (s *Service) CreateIssue(ctx context.Context, params *CreateIssueParams) (R
 	jIssue := buildJiraIssue()
 	created, _, err := s.client.Issue.CreateWithContext(ctx, jIssue)
 	if err != nil {
-		log.Printf("[jira] CreateIssue failed: %v", err)
 		return Response{Success: false, Message: fmt.Sprintf("failed to create issue: %v", err)}, nil
 	}
 
-	log.Printf("[jira] CreateIssue succeeded, issue key=%s", created.Key)
+	slog.Info("[jira] create_issue succeeded", "key", created.Key)
 	return Response{Success: true, Message: "Issue created successfully", Issue: fromJiraIssue(created)}, nil
 }
 
@@ -321,7 +305,7 @@ func (s *Service) GetIssue(ctx context.Context, issue *Issue) (Response, error) 
 		idOrKey = issue.Key
 	}
 
-	log.Printf("[jira] GetIssue called with id_or_key=%s", idOrKey)
+	slog.Debug("[jira] get_issue called", "id_or_key", idOrKey)
 
 	if issue == nil || (issue.ID == "" && issue.Key == "") {
 		return Response{Success: false, Message: "missing issue id or key"}, nil
@@ -329,11 +313,10 @@ func (s *Service) GetIssue(ctx context.Context, issue *Issue) (Response, error) 
 
 	result, _, err := s.client.Issue.Get(idOrKey, nil)
 	if err != nil {
-		log.Printf("[jira] GetIssue failed: %v", err)
 		return Response{Success: false, Message: fmt.Sprintf("failed to get issue: %v", err)}, nil
 	}
 
-	log.Printf("[jira] GetIssue succeeded for %s", idOrKey)
+	slog.Debug("[jira] get_issue succeeded", "id_or_key", idOrKey)
 	return Response{Success: true, Message: "Issue retrieved successfully", Issue: fromJiraIssue(result)}, nil
 }
 
@@ -364,7 +347,7 @@ func (s *Service) UpdateIssue(ctx context.Context, issue *Issue) (Response, erro
 	if idOrKey == "" {
 		idOrKey = issue.Key
 	}
-	log.Printf("[jira] UpdateIssue called with id_or_key=%s", idOrKey)
+	slog.Debug("[jira] update_issue called", "id_or_key", idOrKey)
 
 	if issue == nil || (issue.ID == "" && issue.Key == "") {
 		return Response{Success: false, Message: "missing issue id or key"}, nil
@@ -373,7 +356,6 @@ func (s *Service) UpdateIssue(ctx context.Context, issue *Issue) (Response, erro
 	if issue.Status != "" {
 		err := s.updateStatus(idOrKey, issue.Status)
 		if err != nil {
-			log.Printf("[jira] UpdateIssue failed to update status: %v", err)
 			return Response{Success: false, Message: fmt.Sprintf("failed to update status: %v", err)}, nil
 		}
 	}
@@ -384,12 +366,11 @@ func (s *Service) UpdateIssue(ctx context.Context, issue *Issue) (Response, erro
 	if hasOtherFields {
 		_, _, err := s.client.Issue.Update(toJiraIssue(issue))
 		if err != nil {
-			log.Printf("[jira] UpdateIssue failed: %v", err)
 			return Response{Success: false, Message: fmt.Sprintf("failed to update issue: %v", err)}, nil
 		}
 	}
 
-	log.Printf("[jira] UpdateIssue succeeded for %s", idOrKey)
+	slog.Info("[jira] update_issue succeeded", "id_or_key", idOrKey)
 	return Response{Success: true, Message: "Issue updated successfully"}, nil
 }
 
@@ -401,7 +382,7 @@ func (s *Service) AddComment(ctx context.Context, issue *Issue) (Response, error
 
 	newComment := issue.Comments[len(issue.Comments)-1]
 
-	log.Printf("[jira] AddComment called with id_or_key=%s", idOrKey)
+	slog.Debug("[jira] add_comment called", "id_or_key", idOrKey)
 
 	if issue == nil || (issue.ID == "" && issue.Key == "") {
 		return Response{Success: false, Message: "missing issue id or key"}, nil
@@ -416,11 +397,10 @@ func (s *Service) AddComment(ctx context.Context, issue *Issue) (Response, error
 
 	_, _, err := s.client.Issue.AddComment(idOrKey, comment)
 	if err != nil {
-		log.Printf("[jira] AddComment failed: %v", err)
 		return Response{Success: false, Message: fmt.Sprintf("failed to add comment: %v", err)}, nil
 	}
 
-	log.Printf("[jira] AddComment succeeded for %s", idOrKey)
+	slog.Info("[jira] add_comment succeeded", "id_or_key", idOrKey)
 	// We can't easily map back a single comment to Issue struct which has a list,
 	// but the caller expects Response.
 
@@ -433,7 +413,7 @@ func (s *Service) DeleteIssue(ctx context.Context, issue *Issue) (Response, erro
 		idOrKey = issue.Key
 	}
 
-	log.Printf("[jira] DeleteIssue called with id_or_key=%s", idOrKey)
+	slog.Debug("[jira] delete_issue called", "id_or_key", idOrKey)
 
 	if issue == nil || (issue.ID == "" && issue.Key == "") {
 		return Response{Success: false, Message: "missing issue id or key"}, nil
@@ -441,10 +421,9 @@ func (s *Service) DeleteIssue(ctx context.Context, issue *Issue) (Response, erro
 
 	_, err := s.client.Issue.Delete(idOrKey)
 	if err != nil {
-		log.Printf("[jira] DeleteIssue failed: %v", err)
 		return Response{Success: false, Message: fmt.Sprintf("failed to delete issue: %v", err)}, nil
 	}
 
-	log.Printf("[jira] DeleteIssue succeeded for %s", idOrKey)
+	slog.Info("[jira] delete_issue succeeded", "id_or_key", idOrKey)
 	return Response{Success: true, Message: "Issue deleted successfully"}, nil
 }

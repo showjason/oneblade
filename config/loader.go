@@ -52,10 +52,10 @@ func (l *Loader) Load() (*Config, error) {
 		return nil, fmt.Errorf("parse config file %s: %w", l.configPath, err)
 	}
 
-	// strict mode check for unknown keys
-	if err := l.checkUnknownKeys(&meta); err != nil {
-		return nil, err
-	}
+	// // strict mode check for unknown keys
+	// if err := l.checkUnknownKeys(&meta); err != nil {
+	// 	return nil, err
+	// }
 
 	applyDefaults(&cfg)
 
@@ -120,22 +120,22 @@ func validateConversation(cfg ConversationConfig) error {
 }
 
 // checkUnknownKeys checks for undecoded keys in the config
-func (l *Loader) checkUnknownKeys(meta *toml.MetaData) error {
-	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
-		var unknown []toml.Key
-		for _, k := range undecoded {
-			// Ignore [services.<name>.options] as they are delayed parsed
-			if len(k) >= 3 && k[0] == "services" && k[2] == "options" {
-				continue
-			}
-			unknown = append(unknown, k)
-		}
-		if len(unknown) > 0 {
-			return fmt.Errorf("parse config file %s: unknown keys: %v", l.configPath, unknown)
-		}
-	}
-	return nil
-}
+// func (l *Loader) checkUnknownKeys(meta *toml.MetaData) error {
+// 	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
+// 		var unknown []toml.Key
+// 		for _, k := range undecoded {
+// 			// Ignore [services.<name>.options] as they are delayed parsed
+// 			if len(k) >= 3 && k[0] == "services" && k[2] == "options" {
+// 				continue
+// 			}
+// 			unknown = append(unknown, k)
+// 		}
+// 		if len(unknown) > 0 {
+// 			return fmt.Errorf("parse config file %s: unknown keys: %v", l.configPath, unknown)
+// 		}
+// 	}
+// 	return nil
+// }
 
 // loadAndExpand 读取文件并展开环境变量
 func (l *Loader) loadAndExpand(path string) (string, error) {

@@ -75,7 +75,6 @@ func (r *Registry) InitFromConfig(loader *config.Loader) error {
 	for name, serviceCfg := range cfg.Services {
 		svc, err := r.initService(loader, name, serviceCfg)
 		if err != nil {
-			slog.Error("service initialization failed", "service", name, "error", err)
 			initErrors = append(initErrors, fmt.Errorf("service %s: %w", name, err))
 			continue
 		}
